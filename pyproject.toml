@@ -5,7 +5,11 @@ description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
+    "llama-index-core>=0.14.25",
+    "llama-index-embeddings-ollama>=0.10.0",
+    "llama-index-vector-stores-qdrant>=0.10.4",
     "pymupdf>=1.28.2",
+    "python-dotenv>=1.2.4",
 ]
 
 [project.scripts]

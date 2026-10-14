@@ -10,17 +10,19 @@ I'm building this step by step to learn, and I'm new to macOS and the terminal.
 - Make one small change at a time, then tell me how to run it and what output to expect.
 - Don't write large parts of the codebase in one go unless I ask; prefer explaining and letting me type it.
 - Ask before adding a new dependency or any paid API.
+- Keep `notes.md` (my interview prep) up to date: whenever we use a new tool, library, Python feature or design decision, add a short entry saying what it is and why we use it. Keep it brief and in interview-ready wording.
 
 ## Stack
 
 - Python 3.12, managed with **uv** (never pip or a manually activated venv).
 - LlamaIndex for indexing and retrieval.
-- Qdrant as the vector database (EU-based, runs locally in Docker).
+- Qdrant Cloud as the vector database (free tier, cluster in an EU region). Connection details come from `.env` (`QDRANT_URL`, `QDRANT_API_KEY`), loaded with `python-dotenv`; never hard-code or print the key.
 - Local models via **Ollama**, running natively on the Mac (MacBook M1 Pro, 16 GB RAM):
   - LLM: `qwen3.5:9b` (4-bit)
   - Embeddings: `qwen3-embedding:0.6b`
 - PyMuPDF (`pymupdf`) for PDF text extraction.
-- Keep everything able to run offline on 16 GB RAM.
+- Models run locally on 16 GB RAM; only chunk text and vectors go to Qdrant Cloud.
+- Install `llama-index-core` plus specific integrations, never the `llama-index` umbrella package (it pulls in OpenAI). Always set `Settings.llm` and `Settings.embed_model` explicitly so nothing falls back to OpenAI.
 
 ## Layout
 
@@ -28,7 +30,11 @@ I'm building this step by step to learn, and I'm new to macOS and the terminal.
 data/ai-act.pdf          # source PDF from EUR-Lex (git-ignored)
 src/ai_act_rag/          # package code (uv --package layout)
   parse.py               # PDF -> clean lines with page numbers -> legal units
+  chunk.py               # legal units -> chunks with citations (split by numbered paragraph)
+  config.py              # loads .env, connects to Qdrant Cloud
 pyproject.toml           # dependencies, managed with `uv add`
+.env.example             # template for .env (copy it; .env itself is git-ignored)
+notes.md                 # interview prep: tools, decisions, concepts
 ```
 
 ## Commands
@@ -60,9 +66,9 @@ Chunk by these legal units (split long ones by paragraph), not by fixed characte
 
 ## Planned pipeline
 
-1. Parse PDF into legal units (in progress)
-2. Chunk units, attach metadata
-3. Embed with Ollama and store in Qdrant; add BM25 keyword search and fuse both with reciprocal rank fusion
+1. Parse PDF into legal units (done: 180 recitals, 113 articles, 13 annexes)
+2. Chunk units, attach metadata (in progress)
+3. Embed with Ollama and store in Qdrant Cloud; add BM25 keyword search and fuse both with reciprocal rank fusion
 4. Answer with the local LLM, citing units and pages; refuse when the context doesn't support an answer
 5. Small evaluation set of questions with expected articles
 6. FastAPI endpoint and a simple web page

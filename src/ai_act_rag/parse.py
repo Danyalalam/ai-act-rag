@@ -23,12 +23,42 @@ FOOTER_TOP = 800  # header/footer bands are outside 100..800
 FOOTNOTE_MAX_FONT_SIZE = 9.0
 
 
+ANNEX_NUMBERS = ["I", "II", "III", "IV", "V", "VI", "VII", "VIII", "IX", "X", "XI", "XII", "XIII"]
+CHAPTER_HEADING = re.compile(r"CHAPTER ([IVXL]+)")
+SECTION_HEADING = re.compile(r"SECTION (\d+)")
+
+
 @dataclass(frozen=True)
 class Line:
-    """One clean line of text and the PDF page it came from (1-based)."""
+    """One clean line of text, the PDF page it came from (1-based), and whether it is bold."""
 
     page: int
     text: str
+    bold: bool = False
+
+
+@dataclass(frozen=True)
+class Unit:
+    """One legal unit: a recital, an article or an annex."""
+
+    kind: str  # "recital", "article" or "annex"
+    number: str  # "27", "26" or "III"
+    title: str  # empty for recitals
+    chapter: str | None  # "III" (articles only)
+    section: str | None  # "2" (articles only, when the chapter has sections)
+    lines: tuple[Line, ...]
+
+    @property
+    def first_page(self) -> int:
+        return self.lines[0].page
+
+    @property
+    def last_page(self) -> int:
+        return self.lines[-1].page
+
+    @property
+    def text(self) -> str:
+        return "\n".join(line.text for line in self.lines)
 
 
 def separator_ys(page: pymupdf.Page) -> list[float]:
@@ -77,18 +107,25 @@ def footnote_top(page: pymupdf.Page) -> float | None:
     return None
 
 
-def page_text_without_footnotes(page: pymupdf.Page) -> str:
-    """Return the page's text, leaving out the footnote area if there is one."""
+def page_lines(page: pymupdf.Page) -> list[Line]:
+    """Return the page's lines with their bold flag, leaving out the footnote area."""
     top = footnote_top(page)
-    if top is None:
-        return page.get_text()
-    return page.get_text(clip=pymupdf.Rect(0, 0, page.rect.width, top))
-
-
-def extract_pages(pdf_path: Path) -> list[str]:
-    """Return the text of every page in the PDF without footnotes, one string per page."""
-    with pymupdf.open(pdf_path) as doc:
-        return [page_text_without_footnotes(page) for page in doc]
+    bottom = page.rect.height if top is None else top
+    text = page.get_text("dict", clip=pymupdf.Rect(0, 0, page.rect.width, bottom))
+    lines = []
+    for block in text["blocks"]:
+        for line in block.get("lines", []):
+            spans = [span for span in line["spans"] if span["text"].strip()]
+            if not spans:
+                continue
+            lines.append(
+                Line(
+                    page=page.number + 1,
+                    text="".join(span["text"] for span in line["spans"]),
+                    bold=all(span["flags"] & pymupdf.TEXT_FONT_BOLD for span in spans),
+                )
+            )
+    return lines
 
 
 def is_page_furniture(line: str) -> bool:
@@ -96,31 +133,123 @@ def is_page_furniture(line: str) -> bool:
     return line in PAGE_FURNITURE or PAGE_COUNTER.fullmatch(line) is not None
 
 
-def clean_lines(page_text: str) -> list[str]:
-    """Split a page into trimmed lines, dropping blanks and header/footer lines."""
-    lines = [line.strip() for line in page_text.splitlines()]
-    return [line for line in lines if line and not is_page_furniture(line)]
+def clean_lines(lines: list[Line]) -> list[Line]:
+    """Trim every line and drop blanks and header/footer lines."""
+    trimmed = [Line(line.page, line.text.strip(), line.bold) for line in lines]
+    return [line for line in trimmed if line.text and not is_page_furniture(line.text)]
 
 
-def document_lines(pages: list[str]) -> list[Line]:
-    """Clean every page and return all lines in order, each tagged with its page."""
-    return [
-        Line(page=page_number, text=text)
-        for page_number, page_text in enumerate(pages, start=1)
-        for text in clean_lines(page_text)
-    ]
+def extract_lines(pdf_path: Path) -> list[Line]:
+    """Return all clean lines of the PDF in reading order, without footnotes."""
+    with pymupdf.open(pdf_path) as doc:
+        return [line for page in doc for line in clean_lines(page_lines(page))]
+
+
+def read_title(lines: list[Line], start: int) -> tuple[str, int]:
+    """Join the bold lines from `start` into one title; return it and the next index.
+
+    If none is bold (Annex X's title isn't), the single next line is the title.
+    """
+    end = start
+    while end < len(lines) and lines[end].bold:
+        end += 1
+    if end == start:
+        end = start + 1
+    return " ".join(line.text for line in lines[start:end]), end
+
+
+def split_units(lines: list[Line]) -> list[Unit]:
+    """Group the document's lines into recitals, articles and annexes.
+
+    Headings only count when they carry the next expected number, so a line
+    like "Article 49" inside a sentence that wraps is not mistaken for one.
+    """
+    units: list[Unit] = []
+    # The unit being collected: its fields, and the body lines so far.
+    current: dict | None = None
+    body: list[Line] = []
+
+    def finish() -> None:
+        if current is not None and body:
+            units.append(Unit(**current, lines=tuple(body)))
+
+    part = "recitals"  # then "articles", "signatures", "annexes"
+    next_recital, next_article, next_annex = 1, 1, 0
+    chapter: str | None = None
+    section: str | None = None
+
+    i = 0
+    while i < len(lines):
+        text = lines[i].text
+        new_unit = None
+
+        if part == "recitals":
+            if text == "HAVE ADOPTED THIS REGULATION:":
+                finish()
+                current, body, part = None, [], "articles"
+                i += 1
+                continue
+            if text == f"({next_recital})":
+                new_unit = dict(kind="recital", number=str(next_recital), title="")
+                next_recital += 1
+                i += 1
+
+        elif part == "articles":
+            if match := CHAPTER_HEADING.fullmatch(text):
+                chapter, section = match.group(1), None
+                _, i = read_title(lines, i + 1)
+                continue
+            if match := SECTION_HEADING.fullmatch(text):
+                section = match.group(1)
+                _, i = read_title(lines, i + 1)
+                continue
+            if text == f"Article {next_article}":
+                title, i = read_title(lines, i + 1)
+                new_unit = dict(kind="article", number=str(next_article), title=title)
+                next_article += 1
+            elif text.startswith("Done at "):
+                finish()
+                current, body, part = None, [], "signatures"
+                i += 1
+                continue
+
+        elif next_annex < len(ANNEX_NUMBERS) and text == f"ANNEX {ANNEX_NUMBERS[next_annex]}":
+            number = ANNEX_NUMBERS[next_annex]
+            title, i = read_title(lines, i + 1)
+            new_unit = dict(kind="annex", number=number, title=title)
+            next_annex += 1
+            part = "annexes"
+
+        if new_unit is not None:
+            finish()
+            is_article = new_unit["kind"] == "article"
+            current = dict(
+                **new_unit,
+                chapter=chapter if is_article else None,
+                section=section if is_article else None,
+            )
+            body = []
+            continue
+
+        if current is not None:
+            body.append(lines[i])
+        i += 1
+
+    finish()
+    return units
 
 
 def main() -> None:
-    pages = extract_pages(PDF_PATH)
-    lines = document_lines(pages)
-    print(f"Pages: {len(pages)}")
+    lines = extract_lines(PDF_PATH)
+    units = split_units(lines)
     print(f"Clean lines: {len(lines):,}")
-    for page_number in (1, 118, 121):
-        page_lines = [line.text for line in lines if line.page == page_number]
-        print(f"--- Page {page_number}: last 2 lines ---")
-        for text in page_lines[-2:]:
-            print(text)
+    for kind in ("recital", "article", "annex"):
+        print(f"{kind}: {sum(unit.kind == kind for unit in units)}")
+    for kind, number in (("recital", "27"), ("article", "26"), ("article", "59"), ("annex", "III")):
+        unit = next(u for u in units if u.kind == kind and u.number == number)
+        print(f"--- {kind} {number}: {unit.title!r} ---")
+        print(f"chapter={unit.chapter} section={unit.section} pages={unit.first_page}-{unit.last_page}")
+        print(unit.text[:150])
 
 
 if __name__ == "__main__":
