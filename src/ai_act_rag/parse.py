@@ -15,6 +15,13 @@ PAGE_FURNITURE = {
 # Page counters like "12/144".
 PAGE_COUNTER = re.compile(r"\d+/\d+")
 
+# Footnotes sit below a short horizontal rule at the left text margin,
+# and are printed smaller (8.5 pt) than body text (9.6 pt).
+SEPARATOR_X = 67  # left edge of the rule, in PDF points
+SEPARATOR_WIDTHS = (45, 60)  # the rule is about 51-53 points wide
+FOOTER_TOP = 800  # header/footer bands are outside 100..800
+FOOTNOTE_MAX_FONT_SIZE = 9.0
+
 
 @dataclass(frozen=True)
 class Line:
@@ -24,10 +31,64 @@ class Line:
     text: str
 
 
+def separator_ys(page: pymupdf.Page) -> list[float]:
+    """Return the y positions of short horizontal rules that may start a footnote area."""
+    ys = []
+    for drawing in page.get_drawings():
+        for item in drawing["items"]:
+            if item[0] != "l":  # only straight lines
+                continue
+            start, end = item[1], item[2]
+            is_horizontal = abs(start.y - end.y) < 1
+            width = abs(end.x - start.x)
+            if (
+                is_horizontal
+                and abs(start.x - SEPARATOR_X) < 2
+                and SEPARATOR_WIDTHS[0] < width < SEPARATOR_WIDTHS[1]
+                and 100 < start.y < FOOTER_TOP
+            ):
+                ys.append(start.y)
+    return ys
+
+
+def largest_font_below(page: pymupdf.Page, y: float) -> float:
+    """Return the largest font size of any text between y and the footer."""
+    area = pymupdf.Rect(0, y, page.rect.width, FOOTER_TOP)
+    text = page.get_text("dict", clip=area)
+    sizes = [
+        span["size"]
+        for block in text["blocks"]
+        for line in block.get("lines", [])
+        for span in line["spans"]
+        if span["text"].strip()
+    ]
+    return max(sizes, default=0.0)
+
+
+def footnote_top(page: pymupdf.Page) -> float | None:
+    """Return the y where the page's footnotes start, or None if it has none.
+
+    The amending articles (102-110) quote other regulations, quoted footnotes
+    included, so a rule only counts if the text below it is footnote-sized.
+    """
+    for y in sorted(separator_ys(page), reverse=True):  # lowest rule first
+        if largest_font_below(page, y) < FOOTNOTE_MAX_FONT_SIZE:
+            return y
+    return None
+
+
+def page_text_without_footnotes(page: pymupdf.Page) -> str:
+    """Return the page's text, leaving out the footnote area if there is one."""
+    top = footnote_top(page)
+    if top is None:
+        return page.get_text()
+    return page.get_text(clip=pymupdf.Rect(0, 0, page.rect.width, top))
+
+
 def extract_pages(pdf_path: Path) -> list[str]:
-    """Return the plain text of every page in the PDF, one string per page."""
+    """Return the text of every page in the PDF without footnotes, one string per page."""
     with pymupdf.open(pdf_path) as doc:
-        return [page.get_text() for page in doc]
+        return [page_text_without_footnotes(page) for page in doc]
 
 
 def is_page_furniture(line: str) -> bool:
@@ -55,10 +116,11 @@ def main() -> None:
     lines = document_lines(pages)
     print(f"Pages: {len(pages)}")
     print(f"Clean lines: {len(lines):,}")
-    print("--- Lines around the page 50/51 boundary ---")
-    boundary = next(i for i, line in enumerate(lines) if line.page == 51)
-    for line in lines[boundary - 2 : boundary + 3]:
-        print(f"p.{line.page}: {line.text}")
+    for page_number in (1, 118, 121):
+        page_lines = [line.text for line in lines if line.page == page_number]
+        print(f"--- Page {page_number}: last 2 lines ---")
+        for text in page_lines[-2:]:
+            print(text)
 
 
 if __name__ == "__main__":
