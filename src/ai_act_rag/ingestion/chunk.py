@@ -1,7 +1,7 @@
 from collections import Counter
 from dataclasses import dataclass
 
-from ai_act_rag.parse import PDF_PATH, Line, Unit, extract_lines, split_units
+from ai_act_rag.ingestion.parse import PDF_PATH, Line, Unit, extract_lines, split_units
 
 # Units longer than this are split into their numbered paragraphs.
 MAX_WORDS = 500

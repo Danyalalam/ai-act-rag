@@ -28,10 +28,15 @@ I'm building this step by step to learn, and I'm new to macOS and the terminal.
 
 ```
 data/ai-act.pdf          # source PDF from EUR-Lex (git-ignored)
-src/ai_act_rag/          # package code (uv --package layout)
-  parse.py               # PDF -> clean lines with page numbers -> legal units
-  chunk.py               # legal units -> chunks with citations (split by numbered paragraph)
-  config.py              # loads .env, connects to Qdrant Cloud
+src/ai_act_rag/          # package code (uv --package layout), one subpackage per pipeline step
+  config.py              # shared: loads .env, connects to Qdrant Cloud
+  ingestion/             # steps 1-3: PDF -> units -> chunks -> embed + upload
+    parse.py             # PDF -> clean lines with page numbers -> legal units
+    chunk.py             # legal units -> chunks with citations (split by numbered paragraph)
+  retrieval/             # step 3: vector search, BM25, reciprocal rank fusion
+  generation/            # step 4: LLM answers with citations
+  evaluation/            # step 5: test questions and metrics
+  api/                   # step 6: FastAPI endpoint and web page
 pyproject.toml           # dependencies, managed with `uv add`
 .env.example             # template for .env (copy it; .env itself is git-ignored)
 notes.md                 # interview prep: tools, decisions, concepts
@@ -43,7 +48,9 @@ notes.md                 # interview prep: tools, decisions, concepts
 uv sync                               # create/update .venv from pyproject.toml
 uv add <package>                      # add a dependency
 uv add --dev <package>                # add a dev-only dependency (pytest, ruff)
-uv run python -m ai_act_rag.parse     # run the parser
+uv run python -m ai_act_rag.ingestion.parse   # run the parser
+uv run python -m ai_act_rag.ingestion.chunk   # run the chunker
+uv run python -m ai_act_rag.config            # check the Qdrant Cloud connection
 uv run pytest                         # run tests (once added)
 uv run ruff check . && uv run ruff format .
 ```
