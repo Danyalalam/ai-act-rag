@@ -14,6 +14,8 @@ source = { editable = "." }
 dependencies = [
     { name = "llama-index-core" },
     { name = "llama-index-embeddings-ollama" },
+    { name = "llama-index-llms-ollama" },
+    { name = "llama-index-retrievers-bm25" },
     { name = "llama-index-vector-stores-qdrant" },
     { name = "pymupdf" },
     { name = "python-dotenv" },
@@ -23,6 +25,8 @@ dependencies = [
 requires-dist = [
     { name = "llama-index-core", specifier = ">=0.14.25" },
     { name = "llama-index-embeddings-ollama", specifier = ">=0.10.0" },
+    { name = "llama-index-llms-ollama", specifier = ">=0.11.0" },
+    { name = "llama-index-retrievers-bm25", specifier = ">=0.8.0" },
     { name = "llama-index-vector-stores-qdrant", specifier = ">=0.10.4" },
     { name = "pymupdf", specifier = ">=1.28.2" },
     { name = "python-dotenv", specifier = ">=1.2.4" },
@@ -247,6 +251,18 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/f0/92/0449c32e718c10e4af40a3e040c830a77cdaeec6e9066622ee60e4c93e6e/banks-2.5.1.tar.gz", hash = "sha256:a7ca5c250b605ae90cfd6e4ca5dd6ce2ee377d5d59021b6feba44e345910026d", size = 196398, upload-time = "2026-09-10T10:15:34.569Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/3f/6f/06c0824ee2611de47a0fc731fa57f6042d3f573025d9f504adfd65e50d51/banks-2.5.1-py3-none-any.whl", hash = "sha256:b7c91365626bab4b46197d24ce04cd69540730ed669a50a399f240318ba3dcfb", size = 39462, upload-time = "2026-09-10T10:15:35.606Z" },
+]
+
+[[package]]
+name = "bm25s"
+version = "0.3.13"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "numpy" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/61/ed/5cef92cb5be8963f17a5d6a31bf20c8b0af466b0dc76fc7951f2b727df4a/bm25s-0.3.13.tar.gz", hash = "sha256:49d76bf892ee730beda6d280a13d34b05d630a63988ae246944a81ce8bd15a12", size = 81454, upload-time = "2026-10-07T02:37:14.367Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/8e/b7/88807a1bc1dfca8f88a0ed0bbc1eff59287c4636dbf3386117c552a682bd/bm25s-0.3.13-py3-none-any.whl", hash = "sha256:caf033369ec16586430544cf31321ff1a284c7c02f2aff87c4f7a2629f031f0e", size = 75516, upload-time = "2026-10-07T02:37:12.67Z" },
 ]
 
 [[package]]
@@ -898,6 +914,33 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/70/ac/ffc116bac024cb0a54b4d28ca9b421e9a08f408c1fcc0039a36de2c0c97b/llama_index_instrumentation-0.6.0.tar.gz", hash = "sha256:b185c4e28a7f32899c27649cc2e2d7d54267fa2ff0cd43cbe2b5212bae98fe3a", size = 56517, upload-time = "2026-08-29T15:33:16.861Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/02/b5/332eb32835360125fa1c90a4b81c58831c48dded5b8426d44e9acd4bf328/llama_index_instrumentation-0.6.0-py3-none-any.whl", hash = "sha256:9588618b271e6c74e58dc81542ea022547c427f036e7cacb655865c4982610bb", size = 16445, upload-time = "2026-08-29T15:33:15.766Z" },
+]
+
+[[package]]
+name = "llama-index-llms-ollama"
+version = "0.11.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "llama-index-core" },
+    { name = "ollama" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/11/99/b82667831e75aca2f49488b2904520180c19cba3c24fc55ee4b177d77888/llama_index_llms_ollama-0.11.0.tar.gz", hash = "sha256:e6b8cac200a9ff67caea531fece0a6272a89e3506b2b9648ec709acffe4a7980", size = 9131, upload-time = "2026-08-31T15:57:16.454Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/64/9c/bf68e265e52ce76df8511b8052f97975d320ec4703ae0f4e2c19c0e99a25/llama_index_llms_ollama-0.11.0-py3-none-any.whl", hash = "sha256:835d552625082a79a4dc17e4a2c5e9bf70de26c7f679db7b3bf427dd593e5247", size = 8801, upload-time = "2026-08-31T15:57:15.664Z" },
+]
+
+[[package]]
+name = "llama-index-retrievers-bm25"
+version = "0.8.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "bm25s" },
+    { name = "llama-index-core" },
+    { name = "pystemmer" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/f3/96/b7241a69f8547b4476bdb70516144447f3893a0e4bf654226e93e3774ca2/llama_index_retrievers_bm25-0.8.0.tar.gz", hash = "sha256:8c487725129556485bb14a8363d5b15999c2392a7c4e02819f429c56ec3a9e3c", size = 5526, upload-time = "2026-08-31T16:06:17.84Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/84/1f/029ef9638c7283fc078fb58c799c0adaddcb12400bedb8cfefbb24bac1bf/llama_index_retrievers_bm25-0.8.0-py3-none-any.whl", hash = "sha256:ef00595e9d5b059619bfc9c6ef2021447e2412c0b55d02d9c2fb766ea2613547", size = 5060, upload-time = "2026-08-31T16:06:16.528Z" },
 ]
 
 [[package]]
@@ -1702,6 +1745,30 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/e2/93/08f404a1f0155fe24137cf2d3aabd3e2b4b08c62053ed89c60f2611be3e9/pymupdf-1.28.2-cp310-abi3-win_arm64.whl", hash = "sha256:ffe91a24edc75c80da2a4b62f50fc0f54632d34fc8fe4cbc48e5c7ff07cf8fb4", size = 19759252, upload-time = "2026-08-06T21:39:12.937Z" },
     { url = "https://files.pythonhosted.org/packages/58/8c/d897dcd32a25b58186c968b15ce4324ca029e9d96460de12325314e390be/pymupdf-1.28.2-cp313-abi3-pyemscripten_2025_0_wasm32.whl", hash = "sha256:2e1b574c0fd2cb238021033fd3c0f9c4388816638df064e4bfb56d9d81736dc8", size = 18399403, upload-time = "2026-08-06T21:39:25.008Z" },
     { url = "https://files.pythonhosted.org/packages/f6/f1/de34a1c53fe2bf8c6e71db84b0ced782d408970c9810d2b456a2ae96814c/pymupdf-1.28.2-cp314-cp314t-manylinux_2_28_x86_64.whl", hash = "sha256:fd481ed48bef56305c41fb7e05a055c03345c899c7b101dad086258b438f8168", size = 25802333, upload-time = "2026-08-06T21:39:41.426Z" },
+]
+
+[[package]]
+name = "pystemmer"
+version = "2.2.0.3"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/26/12/0378ba4391a4674067ae9db0e025ec998f6ca74caddd22fbdc59dc19aafb/pystemmer-2.2.0.3.tar.gz", hash = "sha256:9ac74c8d0f3358dbb050f64cddbb8d55021d831d92305d7c20780ea8d6c0020e", size = 303860, upload-time = "2024-10-10T00:36:25.921Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/81/7c/e09c0ac1aa4571ded5f46c14aed5d4828b61392611ed1c59a8faf1cae98a/PyStemmer-2.2.0.3-cp312-cp312-macosx_10_13_x86_64.whl", hash = "sha256:c30c44241065beb9432273874f199fc109473338d9f2c921a3387fd534fd94a7", size = 214916, upload-time = "2024-10-10T00:56:41.803Z" },
+    { url = "https://files.pythonhosted.org/packages/e5/dc/b30dd228af740b1ffe18e4cfb48c22aa8481ce1e79405cac31086fb849bd/PyStemmer-2.2.0.3-cp312-cp312-macosx_11_0_arm64.whl", hash = "sha256:a6adf0b86b6be85f0cf80b2b255b2b0179782b4a3f39c0a6c5b3dd07af5f95eb", size = 220418, upload-time = "2024-10-10T00:56:43.354Z" },
+    { url = "https://files.pythonhosted.org/packages/f7/68/eb9f06b2f04f408ed748d6e71fb2f5ae92deba0eea07b6e374268d53cb49/PyStemmer-2.2.0.3-cp312-cp312-manylinux_2_5_i686.manylinux1_i686.manylinux_2_17_i686.manylinux2014_i686.whl", hash = "sha256:2d42b41082553fa23a4ce191860fd7caffdeaf8507e84db630a97ed154bd2320", size = 644074, upload-time = "2024-10-10T00:56:45.45Z" },
+    { url = "https://files.pythonhosted.org/packages/a6/9f/e95eeccf29ad1e1dbf4a14b76e2fa5b6698ba06f10634b097b32258839b0/PyStemmer-2.2.0.3-cp312-cp312-manylinux_2_5_x86_64.manylinux1_x86_64.manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:ec763ee2994402c534bf898ff318edd158c32071c3ffbdcd7ae7b7c884250471", size = 683255, upload-time = "2024-10-10T00:56:47.314Z" },
+    { url = "https://files.pythonhosted.org/packages/3b/4b/8b077958eb760ac647d2362f8bd1ae99097fa351edc6333fde0dee51f912/PyStemmer-2.2.0.3-cp312-cp312-musllinux_1_2_i686.whl", hash = "sha256:264f09d5f70b09c845a6f0d0d4973de674056fd50452cb9383ffae8fc0967f1d", size = 649228, upload-time = "2024-10-10T00:56:50.101Z" },
+    { url = "https://files.pythonhosted.org/packages/7f/13/3d57038439293d93e40af89b48bc06c714f8cd8c5d22a9e6d0870f49ea1c/PyStemmer-2.2.0.3-cp312-cp312-musllinux_1_2_x86_64.whl", hash = "sha256:5634f38a781b9a893550c23380af080ca5291d19c2bcb1753a34022d1d0de7cb", size = 682987, upload-time = "2024-10-10T00:56:53.094Z" },
+    { url = "https://files.pythonhosted.org/packages/9a/95/f04305ab6fc6312b4727b725ab983342237c7bb95d21d98bd768146dd9e8/PyStemmer-2.2.0.3-cp312-cp312-win32.whl", hash = "sha256:186c2e90ea2c3d0fab21f10f17b48fb7d716cba5f49b68f7f0fe539db4ff0499", size = 141412, upload-time = "2024-10-10T00:56:54.64Z" },
+    { url = "https://files.pythonhosted.org/packages/0f/73/861a71009f20331cd22aff1c37b9c39ef3af4d57d6816df79d51b3fca533/PyStemmer-2.2.0.3-cp312-cp312-win_amd64.whl", hash = "sha256:320c1da333f5f8571e2b313c9fa6c0a7a79d8a00a2ad0bf29932d931d236d7e8", size = 185395, upload-time = "2024-10-10T00:56:56.177Z" },
+    { url = "https://files.pythonhosted.org/packages/c0/eb/b39bef7c8ec2ad9e198b956104741c1e7a94f0003875ef0a5a32ae20443f/PyStemmer-2.2.0.3-cp313-cp313-macosx_10_13_x86_64.whl", hash = "sha256:806530b6a1542efd6453fc5f5b5aa348d52c337d0eb1dfc54a5ff6a8733d7ccc", size = 214375, upload-time = "2024-10-10T00:56:57.681Z" },
+    { url = "https://files.pythonhosted.org/packages/ad/db/93f0fd99c99cfdfb68a6d671324ceb3e9c0cf2040f47d917a42e615faf03/PyStemmer-2.2.0.3-cp313-cp313-macosx_11_0_arm64.whl", hash = "sha256:d3fe53911811ec554b13a2c3b0ceb1a23c6fbed3d510ea0d8544a4e0b861e4d6", size = 219992, upload-time = "2024-10-10T00:56:59.897Z" },
+    { url = "https://files.pythonhosted.org/packages/5c/52/cb3ad58e8ce701c97a38f7828d899cfd12f0b7b06c49a4d67a17298641eb/PyStemmer-2.2.0.3-cp313-cp313-manylinux_2_5_i686.manylinux1_i686.manylinux_2_17_i686.manylinux2014_i686.whl", hash = "sha256:cf26cc1071685597b54b78dd2f62080c58f9be1cb9b4f9c92f94d5c0b5e5e65d", size = 638201, upload-time = "2024-10-10T00:57:02.474Z" },
+    { url = "https://files.pythonhosted.org/packages/c6/e7/d22c50ac8e76c2878cc1056010d0db26b7e5a7936262320c62a6dcdfdbc9/PyStemmer-2.2.0.3-cp313-cp313-manylinux_2_5_x86_64.manylinux1_x86_64.manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:f3d229a8451e5e909c3f41e19c2f1c9a531d3281954a8cbc06163a458adcc465", size = 678416, upload-time = "2024-10-10T00:57:04.845Z" },
+    { url = "https://files.pythonhosted.org/packages/90/bd/cd603a89316769c4ae3a4d2271c9c9707b26939517bbe2f780c4f171ade3/PyStemmer-2.2.0.3-cp313-cp313-musllinux_1_2_i686.whl", hash = "sha256:f44e27fbdeffd46b513ed80d5dab0c7e0e09fb1cd85e8dbf8041b6e4a2d55bee", size = 643274, upload-time = "2024-10-10T00:57:06.675Z" },
+    { url = "https://files.pythonhosted.org/packages/0a/0e/7fad0a408def5738ce1deffc6242bd8086f76fae1f7a5a4c36e31ab528d0/PyStemmer-2.2.0.3-cp313-cp313-musllinux_1_2_x86_64.whl", hash = "sha256:4acd71d4359399e41543198caf150e7f398a8d52e371a0c89ba63a90ec3e0909", size = 677487, upload-time = "2024-10-10T00:57:08.474Z" },
+    { url = "https://files.pythonhosted.org/packages/11/79/3f429bd0c97fe95d62aee32216dfbe3db9a59c3a8a3ff185bb1927e45658/PyStemmer-2.2.0.3-cp313-cp313-win32.whl", hash = "sha256:91ab47d071383b5c558542bf54facf116f3fd1516c177ef10843f41e528d8873", size = 141345, upload-time = "2024-10-10T00:57:10.635Z" },
+    { url = "https://files.pythonhosted.org/packages/71/65/87b637539c73bf5b1074eba87389616949e073d91f6c670a4d91e16504de/PyStemmer-2.2.0.3-cp313-cp313-win_amd64.whl", hash = "sha256:4e192613a1e02b0cebcbb9f8a708001bdf7ec842972b42008f3b0b006a8c53b6", size = 185251, upload-time = "2024-10-10T00:57:12.081Z" },
 ]
 
 [[package]]

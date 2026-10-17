@@ -29,13 +29,22 @@ I'm building this step by step to learn, and I'm new to macOS and the terminal.
 ```
 data/ai-act.pdf          # source PDF from EUR-Lex (git-ignored)
 src/ai_act_rag/          # package code (uv --package layout), one subpackage per pipeline step
-  config.py              # shared: loads .env, connects to Qdrant Cloud
+  config.py              # shared: loads .env, connects to Qdrant Cloud, collection name
+  models.py              # shared: Ollama embedding model + LLM, LlamaIndex Settings
   ingestion/             # steps 1-3: PDF -> units -> chunks -> embed + upload
     parse.py             # PDF -> clean lines with page numbers -> legal units
     chunk.py             # legal units -> chunks with citations (split by numbered paragraph)
+    index.py             # chunks -> TextNodes -> embed locally -> upload to Qdrant (rebuilds collection)
   retrieval/             # step 3: vector search, BM25, reciprocal rank fusion
+    vector.py            # vector search over the Qdrant collection
+    keyword.py           # BM25 keyword search, built in memory from the chunks in Qdrant
+    hybrid.py            # vector + BM25 merged with reciprocal rank fusion
+    references.py        # direct lookup of units named in the question; default_retriever() = refs + vector
   generation/            # step 4: LLM answers with citations
+    answer.py            # prompt + hybrid retrieval + qwen3.5 -> cited answer, citation check
   evaluation/            # step 5: test questions and metrics
+    questions.py         # test questions with the units that answer them
+    run.py               # hit@k + MRR per retriever; --answers also checks LLM answers
   api/                   # step 6: FastAPI endpoint and web page
 pyproject.toml           # dependencies, managed with `uv add`
 .env.example             # template for .env (copy it; .env itself is git-ignored)
@@ -51,6 +60,10 @@ uv add --dev <package>                # add a dev-only dependency (pytest, ruff)
 uv run python -m ai_act_rag.ingestion.parse   # run the parser
 uv run python -m ai_act_rag.ingestion.chunk   # run the chunker
 uv run python -m ai_act_rag.config            # check the Qdrant Cloud connection
+uv run python -m ai_act_rag.ingestion.index   # embed all chunks and upload (needs Ollama running, ~1 min)
+uv run python -m ai_act_rag.retrieval.vector "your question"   # test search (also .keyword, .hybrid)
+uv run python -m ai_act_rag.generation.answer "your question"  # full answer with citations
+uv run python -m ai_act_rag.evaluation.run [--answers]        # evaluate retrieval (and answers, ~15 min)
 uv run pytest                         # run tests (once added)
 uv run ruff check . && uv run ruff format .
 ```
@@ -74,10 +87,10 @@ Chunk by these legal units (split long ones by paragraph), not by fixed characte
 ## Planned pipeline
 
 1. Parse PDF into legal units (done: 180 recitals, 113 articles, 13 annexes)
-2. Chunk units, attach metadata (in progress)
-3. Embed with Ollama and store in Qdrant Cloud; add BM25 keyword search and fuse both with reciprocal rank fusion
-4. Answer with the local LLM, citing units and pages; refuse when the context doesn't support an answer
-5. Small evaluation set of questions with expected articles
+2. Chunk units, attach metadata (done: 689 chunks; long paragraphs split into points (a), (b), ...)
+3. Embed with Ollama and store in Qdrant Cloud and add BM25 keyword search, fused with reciprocal rank fusion (done)
+4. Answer with the local LLM, citing units and pages; refuse when the context doesn't support an answer (done, ~10-25 s per answer)
+5. Small evaluation set of questions with expected articles (done; re-run after every retrieval change)
 6. FastAPI endpoint and a simple web page
 
 ## Conventions

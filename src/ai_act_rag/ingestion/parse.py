@@ -155,7 +155,8 @@ def read_title(lines: list[Line], start: int) -> tuple[str, int]:
         end += 1
     if end == start:
         end = start + 1
-    return " ".join(line.text for line in lines[start:end]), end
+    title = " ".join(line.text for line in lines[start:end])
+    return title.rstrip("`"), end  # the PDF has a stray backtick after Article 1's title
 
 
 def split_units(lines: list[Line]) -> list[Unit]:

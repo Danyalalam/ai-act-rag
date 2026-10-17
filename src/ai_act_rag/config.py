@@ -5,6 +5,8 @@ from qdrant_client import QdrantClient
 
 load_dotenv()  # read .env from the project root into environment variables
 
+COLLECTION_NAME = "ai_act"  # the Qdrant collection holding the chunks
+
 
 def required_env(name: str) -> str:
     """Return an environment variable, or stop with a clear message if it's missing."""
@@ -16,7 +18,11 @@ def required_env(name: str) -> str:
 
 def qdrant_client() -> QdrantClient:
     """Connect to the Qdrant Cloud cluster configured in .env."""
-    return QdrantClient(url=required_env("QDRANT_URL"), api_key=required_env("QDRANT_API_KEY"))
+    return QdrantClient(
+        url=required_env("QDRANT_URL"),
+        api_key=required_env("QDRANT_API_KEY"),
+        timeout=60,  # seconds; the default (5 s) is too short for uploading batches
+    )
 
 
 def main() -> None:
