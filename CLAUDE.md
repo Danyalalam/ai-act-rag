@@ -46,9 +46,12 @@ src/ai_act_rag/          # package code (uv --package layout), one subpackage pe
     questions.py         # test questions with the units that answer them
     run.py               # hit@k + MRR per retriever; --answers also checks LLM answers
   api/                   # step 6: FastAPI endpoint and web page
+    app.py               # POST /ask (streams NDJSON: sources, tokens, done), GET / (page), GET /health
+    static/index.html    # single self-contained page (no external scripts/fonts)
 pyproject.toml           # dependencies, managed with `uv add`
 .env.example             # template for .env (copy it; .env itself is git-ignored)
 notes.md                 # interview prep: tools, decisions, concepts
+results/                 # saved evaluation runs (JSON, one per run; committed)
 ```
 
 ## Commands
@@ -64,6 +67,7 @@ uv run python -m ai_act_rag.ingestion.index   # embed all chunks and upload (nee
 uv run python -m ai_act_rag.retrieval.vector "your question"   # test search (also .keyword, .hybrid)
 uv run python -m ai_act_rag.generation.answer "your question"  # full answer with citations
 uv run python -m ai_act_rag.evaluation.run [--answers]        # evaluate retrieval (and answers, ~15 min)
+uv run uvicorn ai_act_rag.api.app:app --reload               # web app at http://localhost:8000
 uv run pytest                         # run tests (once added)
 uv run ruff check . && uv run ruff format .
 ```
@@ -91,7 +95,7 @@ Chunk by these legal units (split long ones by paragraph), not by fixed characte
 3. Embed with Ollama and store in Qdrant Cloud and add BM25 keyword search, fused with reciprocal rank fusion (done)
 4. Answer with the local LLM, citing units and pages; refuse when the context doesn't support an answer (done, ~10-25 s per answer)
 5. Small evaluation set of questions with expected articles (done; re-run after every retrieval change)
-6. FastAPI endpoint and a simple web page
+6. FastAPI endpoint and a simple web page (done)
 
 ## Conventions
 

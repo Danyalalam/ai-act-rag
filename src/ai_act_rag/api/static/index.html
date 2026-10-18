@@ -1,0 +1,307 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AI Act Assistant</title>
+<style>
+  :root {
+    --bg: #f6f5f1;
+    --surface: #ffffff;
+    --text: #1d1d1b;
+    --muted: #6b6a64;
+    --border: #e2e0d8;
+    --accent: #1f4fd1;
+    --accent-soft: #e8eefc;
+    --warn-bg: #fff6e0;
+    --warn-text: #7a5300;
+    --radius: 10px;
+    color-scheme: light;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #151614;
+      --surface: #1f201d;
+      --text: #ecebe6;
+      --muted: #9d9b93;
+      --border: #34352f;
+      --accent: #8fb0ff;
+      --accent-soft: #23304f;
+      --warn-bg: #3a2f12;
+      --warn-text: #f3d48a;
+      color-scheme: dark;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font: 16px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  }
+  main { max-width: 760px; margin: 0 auto; padding: 48px 20px 64px; }
+
+  header h1 { font-size: 1.75rem; margin: 0 0 4px; letter-spacing: -0.01em; }
+  header p { margin: 0; color: var(--muted); }
+
+  form { margin-top: 28px; }
+  .ask {
+    display: flex; gap: 10px; align-items: flex-end;
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 10px;
+  }
+  .ask:focus-within { border-color: var(--accent); }
+  textarea {
+    flex: 1; border: 0; outline: 0; resize: none; background: transparent;
+    color: var(--text); font: inherit; min-height: 48px; padding: 6px;
+  }
+  button.primary {
+    border: 0; border-radius: 8px; padding: 10px 18px; font: inherit; font-weight: 600;
+    background: var(--accent); color: var(--surface); cursor: pointer;
+  }
+  button.primary:disabled { opacity: 0.5; cursor: default; }
+
+  .examples { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+  .examples button {
+    border: 1px solid var(--border); background: var(--surface); color: var(--muted);
+    border-radius: 999px; padding: 5px 12px; font: inherit; font-size: 0.875rem; cursor: pointer;
+  }
+  .examples button:hover { color: var(--text); border-color: var(--muted); }
+
+  .status { margin-top: 28px; color: var(--muted); }
+  .error { margin-top: 28px; padding: 14px 16px; border-radius: var(--radius);
+           background: var(--warn-bg); color: var(--warn-text); }
+
+  .answer {
+    margin-top: 28px; background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 20px 22px;
+  }
+  .answer .text { white-space: pre-wrap; }
+  .answer .meta { margin-top: 12px; font-size: 0.8125rem; color: var(--muted); }
+  .answer.refused .text { color: var(--muted); font-style: italic; }
+  a.cite {
+    display: inline-block; padding: 0 7px; margin: 0 1px; border-radius: 6px;
+    background: var(--accent-soft); color: var(--accent); text-decoration: none;
+    font-size: 0.875rem; font-weight: 600; white-space: nowrap;
+  }
+  a.cite:hover { text-decoration: underline; }
+  .warning { margin-top: 12px; padding: 10px 12px; border-radius: 8px;
+             background: var(--warn-bg); color: var(--warn-text); font-size: 0.875rem; }
+
+  h2 { font-size: 0.8125rem; text-transform: uppercase; letter-spacing: 0.06em;
+       color: var(--muted); margin: 32px 0 10px; }
+  details {
+    background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+    margin-bottom: 8px; scroll-margin-top: 16px;
+  }
+  details.flash { border-color: var(--accent); }
+  summary { cursor: pointer; padding: 12px 16px; list-style-position: inside; }
+  summary strong { margin-right: 6px; }
+  summary span { color: var(--muted); font-size: 0.875rem; }
+  details pre {
+    margin: 0; padding: 0 16px 16px; white-space: pre-wrap; font: inherit;
+    font-size: 0.9rem; color: var(--muted);
+  }
+
+  footer { margin-top: 48px; font-size: 0.8125rem; color: var(--muted); }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>AI Act Assistant</h1>
+    <p>Answers from Regulation (EU) 2024/1689, with citations to the exact article and page.</p>
+  </header>
+
+  <form id="form">
+    <div class="ask">
+      <textarea id="question" rows="2" maxlength="500"
+                placeholder="Ask a question about the EU AI Act…" required></textarea>
+      <button class="primary" id="submit" type="submit">Ask</button>
+    </div>
+    <div class="examples" id="examples"></div>
+  </form>
+
+  <div id="status" class="status" hidden></div>
+  <div id="error" class="error" hidden></div>
+  <section id="result" hidden>
+    <div id="answer" class="answer">
+      <div class="text" id="answer-text"></div>
+      <div class="warning" id="unsupported" hidden></div>
+      <div class="meta" id="answer-meta"></div>
+    </div>
+    <h2>Sources given to the model</h2>
+    <div id="sources"></div>
+  </section>
+
+  <footer>
+    Not legal advice. Runs on local models (qwen3.5:9b, qwen3-embedding) via Ollama;
+    the indexed text is stored in an EU-hosted Qdrant cluster.
+  </footer>
+</main>
+
+<script>
+  const EXAMPLES = [
+    "Is emotion recognition at work allowed?",
+    "What obligations do deployers of high-risk AI systems have?",
+    "Do deepfakes have to be labelled?",
+    "What does Article 50 say?",
+  ];
+  // A bracket in the answer, and one citation inside it, e.g. "Article 26(1), p. 67".
+  const BRACKET = /\[([^\[\]]+)\]/g;
+  const CITATION = /^(.+?), p\. [\d\-–]+$/;
+
+  const $ = (id) => document.getElementById(id);
+  const form = $("form"), question = $("question"), submit = $("submit");
+
+  for (const text of EXAMPLES) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.textContent = text;
+    button.onclick = () => { question.value = text; ask(); };
+    $("examples").append(button);
+  }
+
+  // Enter asks; Shift+Enter adds a new line.
+  question.addEventListener("keydown", (event) => {
+    if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); ask(); }
+  });
+  form.addEventListener("submit", (event) => { event.preventDefault(); ask(); });
+
+  function escapeHtml(text) {
+    const div = document.createElement("div");
+    div.textContent = text;
+    return div.innerHTML;
+  }
+
+  // True if `a` is `b` or a part of it: "Article 9(2)(a)" is part of "Article 9(2)".
+  const isPartOf = (a, b) => a === b || a.startsWith(b + "(") || a.startsWith(b + ",");
+
+  // Turn "[Article 26(1), p. 67]" (or several, separated by ";") into badges
+  // that jump to the matching source.
+  function renderAnswer(text, sources) {
+    return escapeHtml(text).replace(BRACKET, (whole, inside) => {
+      const parts = inside.split(";").map((part) => part.trim());
+      if (!parts.every((part) => CITATION.test(part))) return whole;
+      return parts.map((part) => {
+        const citation = part.match(CITATION)[1];
+        const index = sources.findIndex(
+          (s) => isPartOf(citation, s.citation) || isPartOf(s.citation, citation));
+        return index >= 0
+          ? `<a class="cite" href="#source-${index}" data-index="${index}">${part}</a>`
+          : `<a class="cite" title="Not among the retrieved sources">${part}?</a>`;
+      }).join(" ");
+    });
+  }
+
+  function renderSources(sources) {
+    $("sources").replaceChildren(...sources.map((source, index) => {
+      const details = document.createElement("details");
+      details.id = `source-${index}`;
+      details.innerHTML =
+        `<summary><strong>${escapeHtml(source.citation)}</strong>` +
+        `<span>${escapeHtml(source.title || "Recital")} · p. ${escapeHtml(source.pages)}</span></summary>` +
+        `<pre>${escapeHtml(source.text)}</pre>`;
+      return details;
+    }));
+  }
+
+  // Clicking a citation badge opens and highlights its source.
+  $("answer").addEventListener("click", (event) => {
+    const link = event.target.closest("a.cite[data-index]");
+    if (!link) return;
+    const details = $(`source-${link.dataset.index}`);
+    details.open = true;
+    details.classList.add("flash");
+    setTimeout(() => details.classList.remove("flash"), 1500);
+  });
+
+  // Yield each JSON line of a streamed response as soon as it has fully arrived.
+  async function* readLines(response) {
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split("\n");
+      buffer = lines.pop();  // keep a half-received last line for the next chunk
+      for (const line of lines) if (line.trim()) yield JSON.parse(line);
+    }
+    if (buffer.trim()) yield JSON.parse(buffer);
+  }
+
+  async function ask() {
+    const text = question.value.trim();
+    if (text.length < 3 || submit.disabled) return;
+
+    submit.disabled = true;
+    $("error").hidden = true;
+    $("result").hidden = true;
+    $("status").hidden = false;
+    const started = Date.now();
+    const tick = () => {
+      $("status").textContent =
+        `Searching the AI Act and writing an answer… ${Math.round((Date.now() - started) / 1000)} s`;
+    };
+    tick();
+    const timer = setInterval(tick, 1000);
+
+    try {
+      const response = await fetch("/ask", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ question: text }),
+      });
+      if (!response.ok) {
+        // Validation errors (422) list their messages; other errors send one string.
+        const data = await response.json();
+        const detail = Array.isArray(data.detail)
+          ? data.detail.map((d) => d.msg).join("; ")
+          : data.detail;
+        throw new Error(detail || response.statusText);
+      }
+
+      let sources = [];
+      let answer = "";
+      $("answer").classList.remove("refused");
+      $("answer-text").textContent = "";
+      $("unsupported").hidden = true;
+      $("answer-meta").textContent = "";
+
+      // The server sends one JSON object per line: "sources", many "token"s, then "done".
+      for await (const message of readLines(response)) {
+        if (message.type === "sources") {
+          sources = message.sources;
+          renderSources(sources);
+          $("result").hidden = false;
+          $("status").textContent = "Writing the answer…";
+        } else if (message.type === "token") {
+          $("status").hidden = true;
+          answer += message.text;
+          $("answer-text").innerHTML = renderAnswer(answer, sources);
+        } else if (message.type === "done") {
+          $("answer").classList.toggle("refused", message.refused);
+          $("unsupported").hidden = message.unsupported_citations.length === 0;
+          $("unsupported").textContent =
+            "Cited but not among the retrieved sources (check these): " +
+            message.unsupported_citations.join(", ");
+          $("answer-meta").textContent =
+            `Answered in ${message.seconds} s from ${sources.length} sources`;
+        } else if (message.type === "error") {
+          throw new Error(message.message);
+        }
+      }
+    } catch (error) {
+      $("error").textContent = `Something went wrong: ${error.message}`;
+      $("error").hidden = false;
+    } finally {
+      clearInterval(timer);
+      $("status").hidden = true;
+      submit.disabled = false;
+    }
+  }
+</script>
+</body>
+</html>
