@@ -85,7 +85,7 @@ The parser finds exactly 180 recitals, 113 articles and 13 annexes, which matche
 |---|---|
 | Answers citing an expected legal unit | **34 / 36 (94%)** |
 | Off-topic questions correctly refused | **2 / 2** |
-| Citations not backed by a retrieved source | **0** (of all citations in all answers) |
+| Citations not backed by a retrieved source | **0 of 173** |
 | Average time per answer | ~20 s on a laptop |
 
 The two misses are the retrieval gaps listed under Limitations. In one of them the model correctly *refused* rather than guess, because Annex III wasn't among its sources.
