@@ -1,0 +1,39 @@
+# Docker Compose: run the app (and, on a GPU server, Ollama) with one command.
+#
+# On a Mac (Ollama runs natively, with the Apple GPU):
+#   docker compose up --build
+#
+# On a Linux server with an NVIDIA GPU (Ollama runs as a second container):
+#   OLLAMA_BASE_URL=http://ollama:11434 docker compose --profile ollama up --build
+#   docker compose exec ollama ollama pull qwen3-embedding:0.6b
+#   docker compose exec ollama ollama pull qwen3.5:9b
+
+services:
+  app:
+    build: .
+    ports:
+      - "8000:8000"           # host port : container port
+    env_file: .env            # QDRANT_URL and QDRANT_API_KEY, read at runtime, not baked into the image
+    environment:
+      # Default: Ollama running natively on the Mac, reached from inside the container.
+      OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"   # makes that name work on Linux too
+    restart: unless-stopped
+
+  ollama:
+    image: ollama/ollama
+    profiles: ["ollama"]      # only started with --profile ollama
+    volumes:
+      - ollama-models:/root/.ollama   # keep downloaded models between restarts
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    restart: unless-stopped
+
+volumes:
+  ollama-models:

@@ -7,6 +7,10 @@ load_dotenv()  # read .env from the project root into environment variables
 
 COLLECTION_NAME = "ai_act"  # the Qdrant collection holding the chunks
 
+# Where Ollama runs. Natively on the Mac it's localhost; from inside a Docker container
+# it's http://host.docker.internal:11434 (Mac) or http://ollama:11434 (Ollama container).
+OLLAMA_BASE_URL = os.environ.get("OLLAMA_BASE_URL", "http://localhost:11434")
+
 
 def required_env(name: str) -> str:
     """Return an environment variable, or stop with a clear message if it's missing."""

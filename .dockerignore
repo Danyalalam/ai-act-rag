@@ -1,0 +1,11 @@
+# Keep secrets, data and local files out of the image (and out of the build upload).
+.env
+.venv/
+data/
+results/
+.git/
+**/__pycache__/
+*.py[oc]
+.DS_Store
+notes.md
+CLAUDE.md

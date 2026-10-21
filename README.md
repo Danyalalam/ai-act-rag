@@ -117,7 +117,7 @@ Memory was tuned to fit the laptop. An 8k context made the 9B model take 9.9 GB 
 | Vector DB | Qdrant Cloud, EU region | Managed, with metadata filtering and payload indexes; data stays in the EU |
 | Keyword search | BM25 (`bm25s`) | Implemented and evaluated; not the default (see Evaluation) |
 | API / UI | FastAPI, NDJSON streaming, plain HTML + JS | No build step and no external scripts |
-| Tooling | uv, Python 3.12 | Fast, reproducible installs via `uv.lock` |
+| Tooling | uv, Python 3.12, Docker | Fast, reproducible installs via `uv.lock`; a slim, non-root app image |
 
 ## Quickstart
 
@@ -135,6 +135,19 @@ uv run python -m ai_act_rag.ingestion.index            # parse, chunk, embed, up
 
 uv run uvicorn ai_act_rag.api.app:app                  # open http://localhost:8000
 uv run python -m ai_act_rag.generation.answer "Do deepfakes have to be labelled?"   # or in the terminal
+```
+
+### With Docker
+
+The image contains only the app. The models stay in Ollama, because Docker on macOS can't use the Apple GPU.
+
+```bash
+docker compose up --build                 # Mac: app in Docker, Ollama native → http://localhost:8000
+
+# Linux server with an NVIDIA GPU: Ollama as a second container
+OLLAMA_BASE_URL=http://ollama:11434 docker compose --profile ollama up --build
+docker compose exec ollama ollama pull qwen3-embedding:0.6b
+docker compose exec ollama ollama pull qwen3.5:9b
 ```
 
 ## Project structure

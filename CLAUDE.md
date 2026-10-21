@@ -52,6 +52,8 @@ pyproject.toml           # dependencies, managed with `uv add`
 .env.example             # template for .env (copy it; .env itself is git-ignored)
 notes.md                 # interview prep: tools, decisions, concepts
 results/                 # saved evaluation runs (JSON, one per run; committed)
+Dockerfile               # app image only (no models); talks to Ollama via OLLAMA_BASE_URL
+compose.yaml             # app; `--profile ollama` adds an Ollama container (Linux + NVIDIA)
 ```
 
 ## Commands
@@ -68,6 +70,7 @@ uv run python -m ai_act_rag.retrieval.vector "your question"   # test search (al
 uv run python -m ai_act_rag.generation.answer "your question"  # full answer with citations
 uv run python -m ai_act_rag.evaluation.run [--answers]        # evaluate retrieval (and answers, ~15 min)
 uv run uvicorn ai_act_rag.api.app:app --reload               # web app at http://localhost:8000
+docker compose up --build                                    # web app in Docker (Ollama stays native on the Mac)
 uv run pytest                         # run tests (once added)
 uv run ruff check . && uv run ruff format .
 ```

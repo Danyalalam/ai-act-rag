@@ -2,6 +2,8 @@ from llama_index.core import Settings
 from llama_index.embeddings.ollama import OllamaEmbedding
 from llama_index.llms.ollama import Ollama
 
+from ai_act_rag.config import OLLAMA_BASE_URL
+
 EMBED_MODEL = "qwen3-embedding:0.6b"
 LLM_MODEL = "qwen3.5:9b"
 
@@ -17,6 +19,7 @@ def embed_model() -> OllamaEmbedding:
     """The local Ollama embedding model, used for both chunks and questions."""
     return OllamaEmbedding(
         model_name=EMBED_MODEL,
+        base_url=OLLAMA_BASE_URL,
         query_instruction=QUERY_INSTRUCTION,
         embed_batch_size=32,  # texts sent to Ollama per request
         # Context in tokens: the longest chunk is ~1,000 tokens. Ollama's default (4,096)
@@ -30,6 +33,7 @@ def llm() -> Ollama:
     """The local Ollama LLM that writes the answers."""
     return Ollama(
         model=LLM_MODEL,
+        base_url=OLLAMA_BASE_URL,
         # Tokens: question + 6 chunks + answer is ~2,000-3,000. 8,192 made the model take
         # 9.9 GB and pushed a 16 GB Mac into swap; 4,096 is enough and much lighter.
         context_window=4096,
