@@ -3,9 +3,11 @@ import sys
 from llama_index.core import VectorStoreIndex
 from llama_index.core.retrievers import BaseRetriever
 from llama_index.core.schema import NodeWithScore
+from llama_index.core.vector_stores import MetadataFilter, MetadataFilters
 from llama_index.vector_stores.qdrant import QdrantVectorStore
 
 from ai_act_rag.config import COLLECTION_NAME, qdrant_client
+from ai_act_rag.languages import detect_language
 from ai_act_rag.models import configure_settings
 
 TOP_K = 5  # how many chunks to return per question
@@ -16,10 +18,15 @@ def vector_store() -> QdrantVectorStore:
     return QdrantVectorStore(collection_name=COLLECTION_NAME, client=qdrant_client())
 
 
-def vector_retriever(top_k: int = TOP_K) -> BaseRetriever:
-    """A retriever that embeds the question and finds the nearest chunks in Qdrant."""
+def language_filter(language: str) -> MetadataFilters:
+    """Only chunks in `language` ("en"/"de"); Qdrant applies it during the search."""
+    return MetadataFilters(filters=[MetadataFilter(key="language", value=language)])
+
+
+def vector_retriever(top_k: int = TOP_K, language: str = "en") -> BaseRetriever:
+    """A retriever that embeds the question and finds the nearest chunks in `language`."""
     index = VectorStoreIndex.from_vector_store(vector_store())
-    return index.as_retriever(similarity_top_k=top_k)
+    return index.as_retriever(similarity_top_k=top_k, filters=language_filter(language))
 
 
 def show(results: list[NodeWithScore]) -> None:
@@ -38,8 +45,9 @@ def question_from_args(default: str) -> str:
 def main() -> None:
     configure_settings()
     question = question_from_args("What obligations do deployers of high-risk AI systems have?")
-    print(f"Question: {question}\n")
-    show(vector_retriever().retrieve(question))
+    language = detect_language(question).code
+    print(f"Question ({language}): {question}\n")
+    show(vector_retriever(language=language).retrieve(question))
 
 
 if __name__ == "__main__":

@@ -7,8 +7,8 @@ from llama_index.vector_stores.qdrant import QdrantVectorStore
 from qdrant_client.models import PayloadSchemaType
 
 from ai_act_rag.config import COLLECTION_NAME, qdrant_client
-from ai_act_rag.ingestion.chunk import Chunk, chunk_units
-from ai_act_rag.ingestion.parse import PDF_PATH, extract_lines, split_units
+from ai_act_rag.ingestion.chunk import Chunk, chunk_language
+from ai_act_rag.languages import LANGUAGES
 from ai_act_rag.models import configure_settings
 
 # Metadata the embedding sees: the citation and title help match questions like
@@ -17,12 +17,16 @@ EMBED_METADATA = {"citation", "title"}
 # Metadata the LLM sees next to each chunk, so it can cite unit and page.
 LLM_METADATA = {"citation", "title", "pages"}
 # Fields we may filter searches on; Qdrant needs an index on them.
-FILTER_FIELDS = ("kind", "number", "chapter")
+FILTER_FIELDS = ("language", "unit_key", "kind", "number", "chapter")
 
 
 def chunk_id(chunk: Chunk) -> str:
-    """A stable ID from the citation, so re-indexing overwrites instead of duplicating."""
-    return str(uuid.uuid5(uuid.NAMESPACE_URL, f"ai-act/{chunk.citation}"))
+    """A stable ID from language + unit, so re-indexing overwrites instead of duplicating.
+
+    The language is part of it: otherwise "Article 26(1)" in English and German would
+    get the same ID and overwrite each other.
+    """
+    return str(uuid.uuid5(uuid.NAMESPACE_URL, f"ai-act/{chunk.unit.language}/{chunk.unit_key}"))
 
 
 def chunk_to_node(chunk: Chunk) -> TextNode:
@@ -34,7 +38,9 @@ def chunk_to_node(chunk: Chunk) -> TextNode:
         else f"{chunk.first_page}-{chunk.last_page}"
     )
     metadata = {
-        "citation": chunk.citation,
+        "language": unit.language,
+        "unit_key": chunk.unit_key,  # the same in every language, e.g. "Article 26(1)"
+        "citation": chunk.citation,  # in the chunk's language, e.g. "Artikel 26 Absatz 1"
         "kind": unit.kind,
         "number": unit.number,
         "paragraph": chunk.paragraph,
@@ -56,9 +62,13 @@ def chunk_to_node(chunk: Chunk) -> TextNode:
 
 
 def build_nodes() -> list[TextNode]:
-    """Parse the PDF and return one node per chunk."""
-    chunks = chunk_units(split_units(extract_lines(PDF_PATH)))
-    return [chunk_to_node(chunk) for chunk in chunks]
+    """Parse every language's PDF and return one node per chunk."""
+    nodes = []
+    for language in LANGUAGES.values():
+        chunks = chunk_language(language)
+        print(f"{language.code}: {len(chunks)} chunks")
+        nodes += [chunk_to_node(chunk) for chunk in chunks]
+    return nodes
 
 
 def main() -> None:

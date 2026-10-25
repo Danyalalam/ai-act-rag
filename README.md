@@ -1,6 +1,6 @@
 # AI Act RAG
 
-**Ask questions about the EU AI Act and get answers that cite the exact article and page, from models that run entirely on a laptop.**
+**Ask questions about the EU AI Act in English or German and get answers that cite the exact article and page, from models that run entirely on a laptop.**
 
 > **Q:** Is emotion recognition at work allowed?
 >
@@ -14,6 +14,7 @@ A retrieval-augmented generation (RAG) system over [Regulation (EU) 2024/1689](h
 - **Private by design.** The embedding model and the LLM run locally via Ollama. Only public law text and its vectors are stored, in a Qdrant cluster in the EU.
 - **Decisions backed by measurement.** On a 36-question evaluation set, **34 answers cite the correct legal unit, off-topic questions are refused, and no answer cites a provision it wasn't shown.** The same evaluation showed that the popular "hybrid search" scored *worse* than vector search on this corpus, so the system uses what measured best.
 - **Guards against hallucination.** A strict grounding prompt, a fixed refusal sentence, and an automatic check that flags any citation the model wasn't actually given.
+- **English and German.** German questions are answered from the German text, with German legal citations (`[Artikel 5 Absatz 1 Buchstabe f, S. 51]`). Both language versions are chunked identically and linked by a language-neutral key. Adding a language means adding one config.
 - **Streaming web UI.** Sources appear in ~1.5 s, then the answer streams in token by token. Citations are clickable and open the source text.
 
 ## Architecture
@@ -92,6 +93,22 @@ The two misses are the retrieval gaps listed under Limitations. In one of them t
 
 Every run is saved to [`results/`](results/) with the git commit, model settings, per-question ranks, full answers and their sources, so results can be traced to the code that produced them. Run it yourself with `uv run python -m ai_act_rag.evaluation.run --answers`.
 
+### German
+
+The same 36 questions in German, with the same expected units, answered only from the German text:
+
+| Retriever | hit@5 (EN → DE) | MRR (EN → DE) |
+|---|---|---|
+| **Vector + reference lookup** | 94% → **94%** | 0.78 → **0.67** |
+| Vector only | 86% → 89% | 0.69 → 0.59 |
+| Hybrid (RRF) | 81% → 83% | 0.59 → 0.54 |
+
+German finds the right unit as often, but ranks it first less often. Run with `uv run python -m ai_act_rag.evaluation.run de`.
+
+## Multilingual design
+
+The EU publishes the Act in every official language with identical structure and numbering. Everything language-specific lives in one config per language (`languages.py`): header lines, heading words (`Artikel`, `ANHANG`, `KAPITEL`), citation style and refusal sentence. Inspecting the German PDF showed it numbers paragraphs the other way round from English (`(1)` vs `1.`), so the markers are configurable too. Because word counts differ between languages, the English chunk structure is recorded and every other language is split at exactly the same places. Both versions live in one Qdrant collection, filtered by `language`.
+
 ## Performance
 
 On a MacBook Pro M1 Pro with 16 GB RAM, with nothing running in the cloud except the vector database:
@@ -130,7 +147,7 @@ ollama pull qwen3-embedding:0.6b          # embedding model (~640 MB)
 ollama pull qwen3.5:9b                    # LLM (~7.6 GB)
 cp .env.example .env                      # then add your QDRANT_URL and QDRANT_API_KEY
 
-# Download the AI Act PDF from EUR-Lex and save it as data/ai-act.pdf
+# Download the AI Act PDF from EUR-Lex: English as data/ai-act.pdf, German as data/OJ_L_202401689_DE_TXT.pdf
 uv run python -m ai_act_rag.ingestion.index            # parse, chunk, embed, upload
 
 uv run uvicorn ai_act_rag.api.app:app                  # open http://localhost:8000
@@ -155,6 +172,7 @@ docker compose exec ollama ollama pull qwen3.5:9b
 ```
 src/ai_act_rag/
 ├── config.py            # .env loading, Qdrant client
+├── languages.py         # per-language config (EN, DE), citation styles, language detection
 ├── models.py            # Ollama embedding model + LLM, LlamaIndex Settings
 ├── ingestion/
 │   ├── parse.py         # PDF → clean lines → recitals, articles, annexes
@@ -181,7 +199,8 @@ Known gaps, found by the evaluation:
 
 - **Broad questions get partial answers.** Only the top 6 chunks reach the LLM, so "What obligations do deployers have?" cites 5 of Article 26's 12 paragraphs. Next: expand a hit to its whole article when space allows.
 - **Two retrieval misses remain.** "When does the regulation apply?" misses Article 113, and "Which areas are high-risk?" misses Annex III. Next: a local cross-encoder reranker, measured on the same test set.
-- **The original text only.** The index covers the regulation as published on 12 July 2024. It does not include later amendments or guidance.
+- **The original text only.** The index covers the regulation (English and German) as published on 12 July 2024. It does not include later amendments or guidance.
+- **German answers not yet scored end to end.** Retrieval is evaluated in both languages; the full answer evaluation (`--answers de`) is the next run.
 - **Single user.** One LLM call at a time, by design for a laptop. A server deployment would use a GPU-backed model server.
 - **Local runtime hiccups.** Ollama's Apple-GPU (MLX) runner occasionally crashes while reading a prompt: 5 of 38 questions in the evaluation failed once. The API and the evaluation retry automatically, and all 38 succeeded.
 - Planned: unit tests for the parser and chunker.

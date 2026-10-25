@@ -79,3 +79,55 @@ QUESTIONS = [
     EvalQuestion("What is the capital of France?", ()),
     EvalQuestion("How do I bake sourdough bread?", ()),
 ]
+
+
+# The same questions in German, in the same order, so they share the expected units.
+# Expected units are language-neutral keys ("Article 5(1)(f)"), matched against each
+# chunk's `unit_key`, so one answer key serves both languages.
+GERMAN_TEXTS = [
+    "Was ist ein KI-System?",
+    "Wer gilt nach der KI-Verordnung als Anbieter?",
+    "Was ist ein Betreiber?",
+    "Gilt die KI-Verordnung für KI, die für militärische Zwecke verwendet wird?",
+    "Ab wann gilt die Verordnung?",
+    "Was sagt die KI-Verordnung über die KI-Kompetenz des Personals?",
+    "Welche KI-Praktiken sind verboten?",
+    "Ist Emotionserkennung am Arbeitsplatz erlaubt?",
+    "Ist Social Scoring von Personen erlaubt?",
+    "Darf die Polizei Gesichtserkennung in Echtzeit im öffentlichen Raum einsetzen?",
+    "Wann wird ein KI-System als hochriskant eingestuft?",
+    "Welche Bereiche sind als hochriskant aufgeführt?",
+    "Ist KI zur Vorauswahl von Bewerbern hochriskant?",
+    "Welches Risikomanagement brauchen Hochrisiko-KI-Systeme?",
+    "Welche Anforderungen gelten für Trainingsdaten?",
+    "Was muss die technische Dokumentation enthalten?",
+    "Müssen Hochrisiko-KI-Systeme Protokolle führen?",
+    "Welche menschliche Aufsicht ist für Hochrisiko-KI erforderlich?",
+    "Welche Anforderungen gelten für Genauigkeit und Cybersicherheit?",
+    "Welche Pflichten haben Betreiber von Hochrisiko-KI-Systemen?",
+    "Wann ist eine Grundrechte-Folgenabschätzung erforderlich?",
+    "Wie funktioniert die Konformitätsbewertung?",
+    "Welche Regeln gelten für die CE-Kennzeichnung?",
+    "Wo müssen Hochrisiko-KI-Systeme registriert werden?",
+    "Wie müssen schwerwiegende Vorfälle gemeldet werden?",
+    "Muss ein Chatbot den Menschen mitteilen, dass sie mit einer KI sprechen?",
+    "Müssen Deepfakes gekennzeichnet werden?",
+    "Wann hat ein KI-Modell mit allgemeinem Verwendungszweck ein systemisches Risiko?",
+    "Welche Pflichten haben Anbieter von KI-Modellen mit allgemeinem Verwendungszweck?",
+    "Was sind KI-Reallabore?",
+    "Welche Geldbußen drohen bei verbotenen KI-Praktiken?",
+    "Was besagt Artikel 113?",
+    "Fasse Anhang III zusammen.",
+    "Was besagt Erwägungsgrund 27?",
+    "Bei welchen Modellen werden ab 10^25 Gleitkommaoperationen Fähigkeiten mit hoher "
+    "Wirkkraft vermutet?",
+    "Was ist ein System zur nachträglichen biometrischen Fernidentifizierung?",
+    "Was ist die Hauptstadt von Frankreich?",
+    "Wie backe ich Sauerteigbrot?",
+]
+assert len(GERMAN_TEXTS) == len(QUESTIONS)
+
+GERMAN_QUESTIONS = [
+    EvalQuestion(text, q.expected) for text, q in zip(GERMAN_TEXTS, QUESTIONS, strict=True)
+]
+QUESTIONS_BY_LANGUAGE = {"en": QUESTIONS, "de": GERMAN_QUESTIONS}

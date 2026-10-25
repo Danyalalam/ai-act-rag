@@ -27,10 +27,12 @@ I'm building this step by step to learn, and I'm new to macOS and the terminal.
 ## Layout
 
 ```
-data/ai-act.pdf          # source PDF from EUR-Lex (git-ignored)
+data/ai-act.pdf          # English PDF from EUR-Lex (git-ignored)
+data/OJ_L_202401689_DE_TXT.pdf  # German PDF (git-ignored)
 src/ai_act_rag/          # package code (uv --package layout), one subpackage per pipeline step
   config.py              # shared: loads .env, connects to Qdrant Cloud, collection name
   models.py              # shared: Ollama embedding model + LLM, LlamaIndex Settings
+  languages.py           # shared: per-language config (EN, DE): headings, markers, citation style, refusal; detect_language()
   ingestion/             # steps 1-3: PDF -> units -> chunks -> embed + upload
     parse.py             # PDF -> clean lines with page numbers -> legal units
     chunk.py             # legal units -> chunks with citations (split by numbered paragraph)
@@ -62,7 +64,7 @@ compose.yaml             # app; `--profile ollama` adds an Ollama container (Lin
 uv sync                               # create/update .venv from pyproject.toml
 uv add <package>                      # add a dependency
 uv add --dev <package>                # add a dev-only dependency (pytest, ruff)
-uv run python -m ai_act_rag.ingestion.parse   # run the parser
+uv run python -m ai_act_rag.ingestion.parse   # run the parser (add `de` for German; also for chunk and evaluation.run)
 uv run python -m ai_act_rag.ingestion.chunk   # run the chunker
 uv run python -m ai_act_rag.config            # check the Qdrant Cloud connection
 uv run python -m ai_act_rag.ingestion.index   # embed all chunks and upload (needs Ollama running, ~1 min)
@@ -90,6 +92,10 @@ Structure, in order:
 5. Annexes I–XIII
 
 Chunk by these legal units (split long ones by paragraph), not by fixed character counts, and keep metadata on each chunk: kind, number, title, chapter, section, page range.
+
+## Languages
+
+English and German are indexed in one Qdrant collection (`language` metadata, filtered at search time). A German question is answered only from the German text, with German citations ("Artikel 26 Absatz 1", "S. 67"). Each chunk has a language-neutral `unit_key` ("Article 26(1)") that links language versions and is used by the evaluation. The English chunk structure is the reference: other languages are split at the same places (`split_plan`). German numbers article paragraphs "(1)" and definitions "1." (the opposite of English), and points "a)".
 
 ## Planned pipeline
 

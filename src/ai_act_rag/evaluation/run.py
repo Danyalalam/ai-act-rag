@@ -8,18 +8,18 @@ from pathlib import Path
 from llama_index.core.query_engine import RetrieverQueryEngine
 from llama_index.core.retrievers import BaseRetriever
 
-from ai_act_rag.evaluation.questions import QUESTIONS, EvalQuestion
+from ai_act_rag.evaluation.questions import QUESTIONS_BY_LANGUAGE, EvalQuestion
 from ai_act_rag.generation.answer import (
-    REFUSAL,
     TOP_K,
     cited_units,
+    is_refusal,
     query_engine,
     unsupported_citations,
 )
 from ai_act_rag.models import EMBED_MODEL, LLM_MODEL, configure_settings
 from ai_act_rag.retrieval.hybrid import hybrid_retriever
 from ai_act_rag.retrieval.keyword import keyword_retriever, load_nodes
-from ai_act_rag.retrieval.references import ReferenceRetriever, matches
+from ai_act_rag.retrieval.references import ReferenceRetriever, find_references, matches
 from ai_act_rag.retrieval.vector import vector_retriever
 
 K_VALUES = (1, 3, 5, 10)  # cut-offs to report hit rate at
@@ -41,7 +41,8 @@ def evaluate_retriever(
     """Score a retriever: hit rate at each k, MRR, and the rank for every question."""
     ranks = []
     for q in questions:
-        citations = [r.node.metadata["citation"] for r in retriever.retrieve(q.question)]
+        # unit_key is language-neutral ("Article 5(1)(f)"), so one answer key fits all languages.
+        citations = [r.node.metadata["unit_key"] for r in retriever.retrieve(q.question)]
         ranks.append(first_hit_rank(citations, q.expected))
 
     hit_rates = {
@@ -63,13 +64,13 @@ def evaluate_retriever(
     }
 
 
-def evaluate_answers(questions: list[EvalQuestion], save: "callable") -> dict:
+def evaluate_answers(questions: list[EvalQuestion], save: "callable", language: str = "en") -> dict:
     """Run the full RAG pipeline on every question and check refusals and citations.
 
     Slow (~20 s per question). `save` is called after each answer, so an
     interrupted run still keeps everything answered so far.
     """
-    engine = query_engine()
+    engine = query_engine(language=language)
     rows = []
     summary: dict = {}
 
@@ -84,11 +85,13 @@ def evaluate_answers(questions: list[EvalQuestion], save: "callable") -> dict:
             continue
         answer = str(response).strip()
         cited = cited_units(answer)
-        refused = REFUSAL in answer
+        # "Artikel 5 Absatz 1 Buchstabe f" -> "Article 5(1)(f)", to compare with the expected keys.
+        cited_keys = [key for c in cited for key in find_references(c)]
+        refused = is_refusal(answer)
         unsupported = unsupported_citations(answer, response.source_nodes)
 
         if q.expected:
-            cites_expected = any(matches(c, e) for c in cited for e in q.expected)
+            cites_expected = any(matches(c, e) for c in cited_keys for e in q.expected)
             if cites_expected:
                 status = "cites expected"
             else:
@@ -158,10 +161,14 @@ def main() -> None:
     configure_settings()
     started = datetime.now()
     RESULTS_DIR.mkdir(exist_ok=True)
-    path = RESULTS_DIR / f"eval-{started:%Y-%m-%d-%H%M}.json"
+    language = "de" if "de" in sys.argv[1:] else "en"
+    questions = QUESTIONS_BY_LANGUAGE[language]
+    suffix = "" if language == "en" else f"-{language}"  # English keeps the original file names
+    path = RESULTS_DIR / f"eval{suffix}-{started:%Y-%m-%d-%H%M}.json"
     results: dict = {
         "date": started.isoformat(timespec="seconds"),
         "git_commit": git_commit(),
+        "language": language,
         "config": {"embed_model": EMBED_MODEL, "llm": LLM_MODEL, "answer_top_k": TOP_K},
         "retrieval": {},
     }
@@ -171,23 +178,23 @@ def main() -> None:
             results["answers"] = answers
         path.write_text(json.dumps(results, indent=2, ensure_ascii=False))
 
-    in_scope = [q for q in QUESTIONS if q.expected]
+    in_scope = [q for q in questions if q.expected]
     print(f"Retrieval on {len(in_scope)} questions (hit@k = right unit in the top k)\n", flush=True)
-    nodes = load_nodes()
+    nodes = load_nodes(language)
     retrievers = {
-        "vector": vector_retriever(MAX_K),
-        "keyword": keyword_retriever(nodes, MAX_K),
-        "hybrid": hybrid_retriever(MAX_K),
-        "vec+refs": ReferenceRetriever(vector_retriever(MAX_K), nodes, MAX_K),
-        "hyb+refs": ReferenceRetriever(hybrid_retriever(MAX_K), nodes, MAX_K),
+        "vector": vector_retriever(MAX_K, language),
+        "keyword": keyword_retriever(nodes, MAX_K, language),
+        "hybrid": hybrid_retriever(MAX_K, language),
+        "vec+refs": ReferenceRetriever(vector_retriever(MAX_K, language), nodes, MAX_K),
+        "hyb+refs": ReferenceRetriever(hybrid_retriever(MAX_K, language), nodes, MAX_K),
     }
     for name, retriever in retrievers.items():
         results["retrieval"][name] = evaluate_retriever(name, retriever, in_scope)
     save()
 
     if "--answers" in sys.argv:
-        print(f"\nAnswers on all {len(QUESTIONS)} questions (saved after each one)\n", flush=True)
-        answers = evaluate_answers(QUESTIONS, save)
+        print(f"\nAnswers on all {len(questions)} questions (saved after each one)\n", flush=True)
+        answers = evaluate_answers(questions, save, language)
         s = answers["summary"]
         print(f"\nAnswers citing an expected unit: {s['cites_expected']}/{s['in_scope']}")
         print(f"Wrongly refused: {s['wrongly_refused']}/{s['in_scope']}")

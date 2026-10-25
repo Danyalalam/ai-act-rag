@@ -1,18 +1,13 @@
 import re
+import sys
 from dataclasses import dataclass
 from pathlib import Path
 
 import pymupdf
 
-PDF_PATH = Path("data/ai-act.pdf")
+from ai_act_rag.languages import ENGLISH, LANGUAGES, Language
 
-# Lines the Official Journal repeats on every page (header and footer).
-PAGE_FURNITURE = {
-    "OJ L, 12.7.2024",
-    "EN",
-    "ELI: http://data.europa.eu/eli/reg/2024/1689/oj",
-}
-# Page counters like "12/144".
+# Page counters like "12/144" (the other repeated header/footer lines are per language).
 PAGE_COUNTER = re.compile(r"\d+/\d+")
 
 # Footnotes sit below a short horizontal rule at the left text margin,
@@ -24,8 +19,6 @@ FOOTNOTE_MAX_FONT_SIZE = 9.0
 
 
 ANNEX_NUMBERS = ["I", "II", "III", "IV", "V", "VI", "VII", "VIII", "IX", "X", "XI", "XII", "XIII"]
-CHAPTER_HEADING = re.compile(r"CHAPTER ([IVXL]+)")
-SECTION_HEADING = re.compile(r"SECTION (\d+)")
 
 
 @dataclass(frozen=True)
@@ -41,6 +34,7 @@ class Line:
 class Unit:
     """One legal unit: a recital, an article or an annex."""
 
+    language: str  # "en" or "de"
     kind: str  # "recital", "article" or "annex"
     number: str  # "27", "26" or "III"
     title: str  # empty for recitals
@@ -128,21 +122,23 @@ def page_lines(page: pymupdf.Page) -> list[Line]:
     return lines
 
 
-def is_page_furniture(line: str) -> bool:
+def is_page_furniture(line: str, language: Language = ENGLISH) -> bool:
     """Return True if the line is a repeated header/footer, not real content."""
-    return line in PAGE_FURNITURE or PAGE_COUNTER.fullmatch(line) is not None
+    return line in language.page_furniture or PAGE_COUNTER.fullmatch(line) is not None
 
 
-def clean_lines(lines: list[Line]) -> list[Line]:
+def clean_lines(lines: list[Line], language: Language = ENGLISH) -> list[Line]:
     """Trim every line and drop blanks and header/footer lines."""
     trimmed = [Line(line.page, line.text.strip(), line.bold) for line in lines]
-    return [line for line in trimmed if line.text and not is_page_furniture(line.text)]
+    return [
+        line for line in trimmed if line.text and not is_page_furniture(line.text, language)
+    ]
 
 
-def extract_lines(pdf_path: Path) -> list[Line]:
-    """Return all clean lines of the PDF in reading order, without footnotes."""
-    with pymupdf.open(pdf_path) as doc:
-        return [line for page in doc for line in clean_lines(page_lines(page))]
+def extract_lines(language: Language = ENGLISH, pdf_path: Path | None = None) -> list[Line]:
+    """Return all clean lines of the language's PDF in reading order, without footnotes."""
+    with pymupdf.open(pdf_path or language.pdf_path) as doc:
+        return [line for page in doc for line in clean_lines(page_lines(page), language)]
 
 
 def read_title(lines: list[Line], start: int) -> tuple[str, int]:
@@ -159,7 +155,7 @@ def read_title(lines: list[Line], start: int) -> tuple[str, int]:
     return title.rstrip("`"), end  # the PDF has a stray backtick after Article 1's title
 
 
-def split_units(lines: list[Line]) -> list[Unit]:
+def split_units(lines: list[Line], language: Language = ENGLISH) -> list[Unit]:
     """Group the document's lines into recitals, articles and annexes.
 
     Headings only count when they carry the next expected number, so a line
@@ -172,12 +168,14 @@ def split_units(lines: list[Line]) -> list[Unit]:
 
     def finish() -> None:
         if current is not None and body:
-            units.append(Unit(**current, lines=tuple(body)))
+            units.append(Unit(language=language.code, **current, lines=tuple(body)))
 
     part = "recitals"  # then "articles", "signatures", "annexes"
     next_recital, next_article, next_annex = 1, 1, 0
     chapter: str | None = None
     section: str | None = None
+    chapter_heading = re.compile(rf"{language.chapter} ([IVXL]+)")
+    section_heading = re.compile(rf"{language.section} (\d+)")
 
     i = 0
     while i < len(lines):
@@ -185,7 +183,7 @@ def split_units(lines: list[Line]) -> list[Unit]:
         new_unit = None
 
         if part == "recitals":
-            if text == "HAVE ADOPTED THIS REGULATION:":
+            if text == language.enacting_formula:
                 finish()
                 current, body, part = None, [], "articles"
                 i += 1
@@ -196,25 +194,28 @@ def split_units(lines: list[Line]) -> list[Unit]:
                 i += 1
 
         elif part == "articles":
-            if match := CHAPTER_HEADING.fullmatch(text):
+            if match := chapter_heading.fullmatch(text):
                 chapter, section = match.group(1), None
                 _, i = read_title(lines, i + 1)
                 continue
-            if match := SECTION_HEADING.fullmatch(text):
+            if match := section_heading.fullmatch(text):
                 section = match.group(1)
                 _, i = read_title(lines, i + 1)
                 continue
-            if text == f"Article {next_article}":
+            if text == f"{language.article} {next_article}":
                 title, i = read_title(lines, i + 1)
                 new_unit = dict(kind="article", number=str(next_article), title=title)
                 next_article += 1
-            elif text.startswith("Done at "):
+            elif text.startswith(language.signature_start):
                 finish()
                 current, body, part = None, [], "signatures"
                 i += 1
                 continue
 
-        elif next_annex < len(ANNEX_NUMBERS) and text == f"ANNEX {ANNEX_NUMBERS[next_annex]}":
+        elif (
+            next_annex < len(ANNEX_NUMBERS)
+            and text == f"{language.annex} {ANNEX_NUMBERS[next_annex]}"
+        ):
             number = ANNEX_NUMBERS[next_annex]
             title, i = read_title(lines, i + 1)
             new_unit = dict(kind="annex", number=number, title=title)
@@ -240,9 +241,17 @@ def split_units(lines: list[Line]) -> list[Unit]:
     return units
 
 
+def language_from_args() -> Language:
+    """The language given on the command line ("en" or "de"), English by default."""
+    codes = [arg for arg in sys.argv[1:] if arg in LANGUAGES]
+    return LANGUAGES[codes[0]] if codes else ENGLISH
+
+
 def main() -> None:
-    lines = extract_lines(PDF_PATH)
-    units = split_units(lines)
+    language = language_from_args()
+    lines = extract_lines(language)
+    units = split_units(lines, language)
+    print(f"Language: {language.code}")
     print(f"Clean lines: {len(lines):,}")
     for kind in ("recital", "article", "annex"):
         print(f"{kind}: {sum(unit.kind == kind for unit in units)}")

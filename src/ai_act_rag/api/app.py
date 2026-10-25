@@ -5,19 +5,22 @@ import time
 from collections.abc import AsyncIterator, Iterator
 from contextlib import asynccontextmanager
 from pathlib import Path
+from typing import Literal
 
 from fastapi import FastAPI
 from llama_index.core.base.response.schema import StreamingResponse as StreamingResponseType
 from fastapi.responses import FileResponse, StreamingResponse
 from pydantic import BaseModel, Field
 
-from ai_act_rag.generation.answer import REFUSAL, query_engine, unsupported_citations
+from ai_act_rag.generation.answer import is_refusal, query_engine, unsupported_citations
+from ai_act_rag.languages import LANGUAGES, detect_language
 from ai_act_rag.models import configure_settings
 
 PAGE = Path(__file__).parent / "static" / "index.html"
 
-# Built once at startup (loads the chunks from Qdrant), then reused for every question.
-engine = None
+# One engine per language, built once at startup (loads the chunks from Qdrant),
+# then reused for every question: {"en": ..., "de": ...}.
+engines: dict = {}
 # One answer at a time: two LLM calls in parallel would overload a 16 GB laptop.
 llm_lock = threading.Lock()
 
@@ -25,9 +28,9 @@ llm_lock = threading.Lock()
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     """Code before `yield` runs when the server starts, code after it when it stops."""
-    global engine
     configure_settings()
-    engine = query_engine(streaming=True)
+    for code in LANGUAGES:
+        engines[code] = query_engine(streaming=True, language=code)
     yield
 
 
@@ -38,6 +41,9 @@ class Question(BaseModel):
     """The request body: {"question": "..."}. Pydantic rejects anything else with a 422 error."""
 
     question: str = Field(min_length=3, max_length=500)
+    # "auto" detects German or English from the question; the answer then comes only
+    # from that language's text, with its citations and page numbers.
+    language: Literal["auto", "en", "de"] = "auto"
 
 
 def event(kind: str, **data: object) -> str:
@@ -53,7 +59,7 @@ class StartedAnswer:
         self.tokens = itertools.chain([first], response.response_gen)
 
 
-def query_until_first_token(question: str, attempts: int = 2) -> StartedAnswer:
+def query_until_first_token(question: str, language: str, attempts: int = 2) -> StartedAnswer:
     """Start an answer, retrying if the model fails before writing anything.
 
     Ollama's GPU (MLX) runner sometimes crashes while reading a prompt; in the
@@ -62,7 +68,7 @@ def query_until_first_token(question: str, attempts: int = 2) -> StartedAnswer:
     """
     for attempt in range(1, attempts + 1):
         try:
-            response = engine.query(question)
+            response = engines[language].query(question)
             first = next(response.response_gen, "")
             return StartedAnswer(response, first)
         except Exception:
@@ -72,7 +78,7 @@ def query_until_first_token(question: str, attempts: int = 2) -> StartedAnswer:
     raise AssertionError("unreachable")
 
 
-def answer_events(question: str) -> Iterator[str]:
+def answer_events(question: str, language: str) -> Iterator[str]:
     """Stream an answer as events: "sources" first, then "token"s, then "done" (or "error").
 
     Retrieval finishes before the first token, so the page can show the sources while
@@ -81,7 +87,7 @@ def answer_events(question: str) -> Iterator[str]:
     start = time.time()
     with llm_lock:
         try:
-            response = query_until_first_token(question)
+            response = query_until_first_token(question, language)
             sources = [
                 {
                     "citation": s.node.metadata["citation"],
@@ -91,7 +97,7 @@ def answer_events(question: str) -> Iterator[str]:
                 }
                 for s in response.source_nodes
             ]
-            yield event("sources", sources=sources)
+            yield event("sources", sources=sources, language=language)
 
             answer = ""
             for token in response.tokens:
@@ -103,7 +109,7 @@ def answer_events(question: str) -> Iterator[str]:
 
     yield event(
         "done",
-        refused=REFUSAL in answer,
+        refused=is_refusal(answer),
         unsupported_citations=unsupported_citations(answer, response.source_nodes),
         seconds=round(time.time() - start, 1),
     )
@@ -128,6 +134,8 @@ def ask(body: Question) -> StreamingResponse:
     FastAPI runs the (plain, non-async) generator in a worker thread, so the slow
     LLM doesn't block the server.
     """
+    question = body.question.strip()
+    language = detect_language(question).code if body.language == "auto" else body.language
     return StreamingResponse(
-        answer_events(body.question.strip()), media_type="application/x-ndjson"
+        answer_events(question, language), media_type="application/x-ndjson"
     )
