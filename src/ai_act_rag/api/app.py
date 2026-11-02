@@ -139,3 +139,5 @@ def ask(body: Question) -> StreamingResponse:
     return StreamingResponse(
         answer_events(question, language), media_type="application/x-ndjson"
     )
+
+## The following is a workaround for a bug in FastAPI 0.100.0: if the server is started
