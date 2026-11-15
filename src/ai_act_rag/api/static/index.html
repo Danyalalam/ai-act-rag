@@ -108,6 +108,28 @@
   }
 
   footer { margin-top: 48px; font-size: 0.8125rem; color: var(--muted); }
+
+  .tabs { display: flex; gap: 4px; margin-top: 24px; border-bottom: 1px solid var(--border); }
+  .tabs button {
+    border: 0; background: none; font: inherit; color: var(--muted); cursor: pointer;
+    padding: 8px 12px; border-bottom: 2px solid transparent; margin-bottom: -1px;
+  }
+  .tabs button[aria-selected="true"] { color: var(--text); border-bottom-color: var(--accent); font-weight: 600; }
+
+  .drop {
+    margin-top: 28px; display: flex; flex-wrap: wrap; gap: 12px; align-items: center;
+    background: var(--surface); border: 1px dashed var(--border); border-radius: var(--radius);
+    padding: 18px;
+  }
+  .drop.over { border-color: var(--accent); }
+  .drop .hint { flex: 1 1 220px; color: var(--muted); font-size: 0.875rem; }
+  #ocr-output {
+    margin-top: 20px; background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 18px 20px; white-space: pre-wrap;
+    font: 0.9375rem/1.6 ui-monospace, SFMono-Regular, Menlo, monospace; overflow-x: auto;
+  }
+  #ocr-output .page-label { display: block; color: var(--accent); font-weight: 600; margin: 12px 0 4px; }
+  #ocr-output .page-label:first-child { margin-top: 0; }
 </style>
 </head>
 <body>
@@ -118,6 +140,12 @@
        Ask in English or German: German questions are answered from the German text.</p>
   </header>
 
+  <nav class="tabs" role="tablist">
+    <button type="button" role="tab" id="tab-ask" aria-selected="true">Ask the AI Act</button>
+    <button type="button" role="tab" id="tab-ocr" aria-selected="false">Read a document (OCR)</button>
+  </nav>
+
+  <div id="panel-ask">
   <form id="form">
     <div class="ask">
       <textarea id="question" rows="2" maxlength="500"
@@ -143,6 +171,20 @@
     <h2>Sources given to the model</h2>
     <div id="sources"></div>
   </section>
+  </div>
+
+  <div id="panel-ocr" hidden>
+    <div class="drop" id="drop">
+      <input type="file" id="ocr-file" accept="image/png,image/jpeg,image/webp,application/pdf">
+      <span class="hint">An image or a PDF (up to 20 pages). Text is read on this machine by
+        GLM-OCR and appears as it is recognised. You can also drop a file here.</span>
+      <button class="primary" id="ocr-submit" type="button">Read text</button>
+    </div>
+    <div id="ocr-status" class="status" hidden></div>
+    <div id="ocr-error" class="error" hidden></div>
+    <div id="ocr-output" hidden></div>
+    <div id="ocr-meta" class="status" hidden></div>
+  </div>
 
   <footer>
     Not legal advice. Runs on local models (qwen3.5:9b, qwen3-embedding) via Ollama;
@@ -318,6 +360,97 @@
       submit.disabled = false;
     }
   }
+
+  // ---- Tabs ----
+  function showTab(name) {
+    for (const tab of ["ask", "ocr"]) {
+      $(`tab-${tab}`).setAttribute("aria-selected", String(tab === name));
+      $(`panel-${tab}`).hidden = tab !== name;
+    }
+  }
+  $("tab-ask").onclick = () => showTab("ask");
+  $("tab-ocr").onclick = () => showTab("ocr");
+
+  // ---- OCR ----
+  const ocrFile = $("ocr-file"), ocrSubmit = $("ocr-submit");
+
+  // Read a File as base64 (the part after "data:...;base64,").
+  function fileToBase64(file) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result.split(",", 2)[1]);
+      reader.onerror = () => reject(reader.error);
+      reader.readAsDataURL(file);
+    });
+  }
+
+  // Dropping a file on the box works like choosing it.
+  const drop = $("drop");
+  drop.addEventListener("dragover", (event) => { event.preventDefault(); drop.classList.add("over"); });
+  drop.addEventListener("dragleave", () => drop.classList.remove("over"));
+  drop.addEventListener("drop", (event) => {
+    event.preventDefault();
+    drop.classList.remove("over");
+    if (event.dataTransfer.files.length) ocrFile.files = event.dataTransfer.files;
+  });
+
+  ocrSubmit.addEventListener("click", async () => {
+    const file = ocrFile.files[0];
+    if (!file || ocrSubmit.disabled) return;
+    ocrSubmit.disabled = true;
+    $("ocr-error").hidden = true;
+    $("ocr-meta").hidden = true;
+    const output = $("ocr-output");
+    output.replaceChildren();
+    output.hidden = true;
+    const status = $("ocr-status");
+    status.hidden = false;
+    status.textContent = "Uploading…";
+    let pages = 0, current = null;
+
+    try {
+      const response = await fetch("/ocr", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ filename: file.name, data: await fileToBase64(file) }),
+      });
+      if (!response.ok) {
+        const data = await response.json();
+        const detail = Array.isArray(data.detail) ? data.detail.map((d) => d.msg).join("; ") : data.detail;
+        throw new Error(detail || response.statusText);
+      }
+      for await (const message of readLines(response)) {
+        if (message.type === "start") {
+          pages = message.pages;
+          status.textContent = `Reading ${pages} page${pages === 1 ? "" : "s"}…`;
+        } else if (message.type === "page") {
+          output.hidden = false;
+          status.textContent = `Reading page ${message.page} of ${pages}…`;
+          if (pages > 1) {
+            const label = document.createElement("span");
+            label.className = "page-label";
+            label.textContent = `Page ${message.page}`;
+            output.append(label);
+          }
+          current = document.createTextNode("");
+          output.append(current);
+        } else if (message.type === "token") {
+          current.appendData(message.text);  // plain text node: nothing is interpreted as HTML
+        } else if (message.type === "done") {
+          $("ocr-meta").textContent = `Read ${pages} page${pages === 1 ? "" : "s"} in ${message.seconds} s`;
+          $("ocr-meta").hidden = false;
+        } else if (message.type === "error") {
+          throw new Error(message.message);
+        }
+      }
+    } catch (error) {
+      $("ocr-error").textContent = `Something went wrong: ${error.message}`;
+      $("ocr-error").hidden = false;
+    } finally {
+      status.hidden = true;
+      ocrSubmit.disabled = false;
+    }
+  });
 </script>
 </body>
 </html>

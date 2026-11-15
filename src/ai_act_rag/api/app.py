@@ -1,3 +1,5 @@
+import base64
+import binascii
 import itertools
 import json
 import threading
@@ -7,16 +9,18 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Literal
 
-from fastapi import FastAPI
-from llama_index.core.base.response.schema import StreamingResponse as StreamingResponseType
+from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse, StreamingResponse
+from llama_index.core.base.response.schema import StreamingResponse as StreamingResponseType
 from pydantic import BaseModel, Field
 
 from ai_act_rag.generation.answer import is_refusal, query_engine, unsupported_citations
 from ai_act_rag.languages import LANGUAGES, detect_language
 from ai_act_rag.models import configure_settings
+from ai_act_rag.ocr.read import page_images, read_page
 
 PAGE = Path(__file__).parent / "static" / "index.html"
+MAX_UPLOAD_BASE64 = 28_000_000  # characters; base64 is 4/3 the file size, so ~20 MB files
 
 # One engine per language, built once at startup (loads the chunks from Qdrant),
 # then reused for every question: {"en": ..., "de": ...}.
@@ -44,6 +48,17 @@ class Question(BaseModel):
     # "auto" detects German or English from the question; the answer then comes only
     # from that language's text, with its citations and page numbers.
     language: Literal["auto", "en", "de"] = "auto"
+
+
+class Document(BaseModel):
+    """An image or PDF to read: {"filename": "scan.png", "data": "<base64>"}.
+
+    Sent as base64 inside JSON rather than as a form upload, so no extra package
+    (python-multipart) is needed.
+    """
+
+    filename: str = Field(min_length=1, max_length=200)
+    data: str = Field(min_length=1, max_length=MAX_UPLOAD_BASE64)
 
 
 def event(kind: str, **data: object) -> str:
@@ -141,3 +156,32 @@ def ask(body: Question) -> StreamingResponse:
     )
 
 ## The following is a workaround for a bug in FastAPI 0.100.0: if the server is started
+
+
+def ocr_events(images: list[bytes]) -> Iterator[str]:
+    """Stream OCR of every page: "start", then per page a "page" and its "token"s, then "done"."""
+    start = time.time()
+    yield event("start", pages=len(images))
+    with llm_lock:  # shares the lock: OCR and answers both load models into the same RAM
+        try:
+            for number, image in enumerate(images, start=1):
+                yield event("page", page=number)
+                for piece in read_page(image):
+                    yield event("token", text=piece)
+        except Exception as error:  # usually Ollama not running or the model not pulled
+            yield event("error", message=f"The OCR model is not available: {error}")
+            return
+    yield event("done", seconds=round(time.time() - start, 1))
+
+
+@app.post("/ocr")
+def ocr(body: Document) -> StreamingResponse:
+    """Read the text of an image or PDF with the local OCR model, streamed as JSON lines."""
+    try:
+        data = base64.b64decode(body.data, validate=True)
+        images = page_images(data, body.filename)
+    except (binascii.Error, ValueError) as error:
+        raise HTTPException(400, str(error)) from error
+    except Exception as error:  # e.g. a file that claims to be a PDF but isn't
+        raise HTTPException(400, f"Could not open {body.filename}: {error}") from error
+    return StreamingResponse(ocr_events(images), media_type="application/x-ndjson")

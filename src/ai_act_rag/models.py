@@ -6,6 +6,8 @@ from ai_act_rag.config import OLLAMA_BASE_URL
 
 EMBED_MODEL = "qwen3-embedding:0.6b"
 LLM_MODEL = "qwen3.5:9b"
+# A 0.9B vision model made for documents: top of OmniDocBench, 2.7 GB, runs in Ollama.
+OCR_MODEL = "glm-ocr"
 
 # Qwen3-embedding works best when queries (not documents) start with a task
 # instruction in this format: "Instruct: <task>\nQuery: <question>".
@@ -39,6 +41,18 @@ def llm() -> Ollama:
         context_window=4096,
         temperature=0.1,  # low = stick closely to the retrieved text
         thinking=False,  # skip Qwen's long "thinking" phase; much faster on a laptop
+        request_timeout=300,  # seconds; the first call also loads the model into memory
+        keep_alive="2m",  # unload from RAM after 2 idle minutes
+    )
+
+
+def ocr_model() -> Ollama:
+    """The local OCR model: reads an image and writes out its text."""
+    return Ollama(
+        model=OCR_MODEL,
+        base_url=OLLAMA_BASE_URL,
+        temperature=0,  # transcribe, don't paraphrase
+        context_window=8192,  # one page image + its text; the model is small, so this is cheap
         request_timeout=300,  # seconds; the first call also loads the model into memory
         keep_alive="2m",  # unload from RAM after 2 idle minutes
     )

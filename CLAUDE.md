@@ -20,6 +20,7 @@ I'm building this step by step to learn, and I'm new to macOS and the terminal.
 - Local models via **Ollama**, running natively on the Mac (MacBook M1 Pro, 16 GB RAM):
   - LLM: `qwen3.5:9b` (4-bit)
   - Embeddings: `qwen3-embedding:0.6b`
+  - OCR: `glm-ocr` (0.9B vision model for documents, 2.7 GB)
 - PyMuPDF (`pymupdf`) for PDF text extraction.
 - Models run locally on 16 GB RAM; only chunk text and vectors go to Qdrant Cloud.
 - Install `llama-index-core` plus specific integrations, never the `llama-index` umbrella package (it pulls in OpenAI). Always set `Settings.llm` and `Settings.embed_model` explicitly so nothing falls back to OpenAI.
@@ -47,8 +48,11 @@ src/ai_act_rag/          # package code (uv --package layout), one subpackage pe
   evaluation/            # step 5: test questions and metrics
     questions.py         # test questions with the units that answer them
     run.py               # hit@k + MRR per retriever; --answers also checks LLM answers
+    ocr.py               # OCR character error rate on rendered PDF pages (text layer = answer key)
+  ocr/                   # local OCR (separate from the RAG pipeline for now)
+    read.py              # image/PDF -> page images -> GLM-OCR text, streamed
   api/                   # step 6: FastAPI endpoint and web page
-    app.py               # POST /ask (streams NDJSON: sources, tokens, done), GET / (page), GET /health
+    app.py               # POST /ask (streams NDJSON: sources, tokens, done), POST /ocr (base64 file -> streamed text), GET / (page), GET /health
     static/index.html    # single self-contained page (no external scripts/fonts)
 pyproject.toml           # dependencies, managed with `uv add`
 .env.example             # template for .env (copy it; .env itself is git-ignored)
@@ -71,6 +75,8 @@ uv run python -m ai_act_rag.ingestion.index   # embed all chunks and upload (nee
 uv run python -m ai_act_rag.retrieval.vector "your question"   # test search (also .keyword, .hybrid)
 uv run python -m ai_act_rag.generation.answer "your question"  # full answer with citations
 uv run python -m ai_act_rag.evaluation.run [--answers]        # evaluate retrieval (and answers, ~15 min)
+uv run python -m ai_act_rag.ocr.read path/to/scan.png        # OCR an image or PDF, streamed to the terminal
+uv run python -m ai_act_rag.evaluation.ocr                   # OCR accuracy (CER) on EN + DE pages
 uv run uvicorn ai_act_rag.api.app:app --reload               # web app at http://localhost:8000
 docker compose up --build                                    # web app in Docker (Ollama stays native on the Mac)
 uv run pytest                         # run tests (once added)

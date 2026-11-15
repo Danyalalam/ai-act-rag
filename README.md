@@ -15,6 +15,7 @@ A retrieval-augmented generation (RAG) system over [Regulation (EU) 2024/1689](h
 - **Decisions backed by measurement.** On a 36-question evaluation set, **34 answers cite the correct legal unit, off-topic questions are refused, and no answer cites a provision it wasn't shown.** The same evaluation showed that the popular "hybrid search" scored *worse* than vector search on this corpus, so the system uses what measured best.
 - **Guards against hallucination.** A strict grounding prompt, a fixed refusal sentence, and an automatic check that flags any citation the model wasn't actually given.
 - **English and German.** German questions are answered from the German text, with German legal citations (`[Artikel 5 Absatz 1 Buchstabe f, S. 51]`). Both language versions are chunked identically and linked by a language-neutral key. Adding a language means adding one config.
+- **Local OCR.** Upload an image or PDF and its text streams in, read on-device by GLM-OCR (0.9B). Measured against the PDFs' own text layer: **0.2–0.3% character error rate** on clean pages, in English and German.
 - **Streaming web UI.** Sources appear in ~1.5 s, then the answer streams in token by token. Citations are clickable and open the source text.
 
 ## Architecture
@@ -109,6 +110,21 @@ German finds the right unit as often, but ranks it first less often. Run with `u
 
 The EU publishes the Act in every official language with identical structure and numbering. Everything language-specific lives in one config per language (`languages.py`): header lines, heading words (`Artikel`, `ANHANG`, `KAPITEL`), citation style and refusal sentence. Inspecting the German PDF showed it numbers paragraphs the other way round from English (`(1)` vs `1.`), so the markers are configurable too. Because word counts differ between languages, the English chunk structure is recorded and every other language is split at exactly the same places. Both versions live in one Qdrant collection, filtered by `language`.
 
+## Local OCR
+
+A second tab in the web page (and `POST /ocr`) reads images and PDFs with [GLM-OCR](https://ollama.com/library/glm-ocr), a 0.9B document-OCR model running in Ollama. PDF pages are rendered at 150 dpi, and each page's text streams back as it's recognised. It's separate from the Q&A pipeline for now.
+
+GLM-OCR was chosen for a 16 GB Mac: it has the best OmniDocBench score among models that run in Ollama, needs 2.5 GB of RAM, and fits beside the 9B LLM.
+
+**Accuracy**, measured by rendering pages of the two PDFs and comparing the OCR output with their exact text layer (`uv run python -m ai_act_rag.evaluation.ocr`):
+
+| Character error rate | Clean (150 dpi) | Rough scan (110 dpi, JPEG q55) |
+|---|---|---|
+| English | 0.27% | 0.01% |
+| German | 0.23% | 6.78%* |
+
+\* On one rough German page the model skipped a few lines; everything it wrote was correct. Vision-language OCR tends to fail by omission rather than by garbling, which is why the result is measured rather than assumed. About 10–20 s per page.
+
 ## Performance
 
 On a MacBook Pro M1 Pro with 16 GB RAM, with nothing running in the cloud except the vector database:
@@ -145,6 +161,7 @@ git clone https://github.com/Danyalalam/ai-act-rag.git && cd ai-act-rag
 uv sync                                   # install dependencies
 ollama pull qwen3-embedding:0.6b          # embedding model (~640 MB)
 ollama pull qwen3.5:9b                    # LLM (~7.6 GB)
+ollama pull glm-ocr                       # OCR model (~2.7 GB, optional)
 cp .env.example .env                      # then add your QDRANT_URL and QDRANT_API_KEY
 
 # Download the AI Act PDF from EUR-Lex: English as data/ai-act.pdf, German as data/OJ_L_202401689_DE_TXT.pdf
@@ -183,6 +200,8 @@ src/ai_act_rag/
 │   ├── keyword.py       # BM25
 │   ├── hybrid.py        # reciprocal rank fusion
 │   └── references.py    # direct lookup of named units (default retriever)
+├── ocr/
+│   └── read.py          # image/PDF → page images → GLM-OCR, streamed
 ├── generation/
 │   └── answer.py        # grounding prompt, streaming, citation check
 ├── evaluation/
